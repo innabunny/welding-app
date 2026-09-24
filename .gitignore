@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.sqlite3
+*.sqlite3-journal
+
+# Node
+node_modules/
+frontend/dist/
+
+# сборка фронта, которую раздаёт Django
+backend/static/spa/
+
+# среда
+.env
+.DS_Store
+*.log
