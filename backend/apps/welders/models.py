@@ -12,6 +12,16 @@ class Welder(models.Model):
     welding_since = models.DateField('Начало стажа по сварке', null=True, blank=True)
     rank = models.CharField('Квалификационный разряд', max_length=20, blank=True)
     is_active = models.BooleanField('Активен', default=True)
+    rfid_uid = models.CharField(
+        "UID карты (hex)",
+        max_length=16,
+        blank=True,
+        unique=True,
+        null=True,
+        help_text="Канонический ключ — hex. Печатный номер на карте — "
+                  "тот же UID в десятичном виде с нулями до 10 знаков",
+    )
+    personnel_no = models.CharField("Табельный номер", max_length=20, blank=True)
 
     class Meta:
         verbose_name = 'Сварщик'

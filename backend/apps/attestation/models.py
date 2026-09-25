@@ -1,4 +1,4 @@
-# АТТЕСТАЦИИБ ОБРАЗЦЫ, ПРАВИЛА 
+# АТТЕСТАЦИИ, ОБРАЗЦЫ, ПРАВИЛА 
 
 # attestation/models.py
 from django.db import models
@@ -78,12 +78,21 @@ class Attestation(models.Model):
         verbose_name = "Аттестация"
         verbose_name_plural = "Аттестации"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["valid_until"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["welder", "method"]),
+        ]
 
     def save(self, *args, **kwargs):
         if self.attested_at and not self.valid_until:
-            self.valid_until = self.attested_at.replace(
-                year=self.attested_at.year + self.VALIDITY_YEARS
-            )
+            d = self.attested_at
+            year = d.year + self.VALIDITY_YEARS
+            try:
+                self.valid_until = d.replace(year=year)
+            except ValueError:
+                # 29 февраля: в невисокосном году переносим на 28-е
+                self.valid_until = d.replace(year=year, day=28)
         super().save(*args, **kwargs)
 
     @property
@@ -114,7 +123,7 @@ class AttestationItem(models.Model):
         "materials.Material", on_delete=models.PROTECT, related_name="+", verbose_name="Материал 1"
     )
     material2 = models.ForeignKey(
-        "materials.Material", on_delete=models.PROTECT, related_name="+", verbose_name="Материал 2"
+        "materials.Material", on_delete=models.PROTECT, related_name="+", null=True, blank=True, verbose_name="Материал 2"
     )
     uniform = models.BooleanField("Однородное", default=False)
     thickness_min = models.DecimalField(
