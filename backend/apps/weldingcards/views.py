@@ -85,10 +85,15 @@ class WeldingCardViewSet(viewsets.ModelViewSet):
         th_from = _dec(params.get("thickness_from"))
         th_to = _dec(params.get("thickness_to"))
         if th_from is not None:
-            qs = qs.filter(operation__seam__thickness__gte=th_from)
+            qs = qs.filter(
+                Q(operation__seam__thickness_1__gte=th_from)
+                | Q(operation__seam__thickness_2__gte=th_from)
+            )
         if th_to is not None:
-            qs = qs.filter(operation__seam__thickness__lte=th_to)
-
+            qs = qs.filter(
+                Q(operation__seam__thickness_1__lte=th_to)
+                | Q(operation__seam__thickness_2__lte=th_to)
+            )
         released = params.get("released")
         if released == "1":
             qs = qs.filter(is_released=True)
@@ -132,9 +137,13 @@ class WeldingCardViewSet(viewsets.ModelViewSet):
                     | Q(operation__seam__material_2_id=material)
                 )
             if thickness is not None:
+                lo = thickness - tolerance
+                hi = thickness + tolerance
                 qs = qs.filter(
-                    operation__seam__thickness__gte=thickness - tolerance,
-                    operation__seam__thickness__lte=thickness + tolerance,
+                    Q(operation__seam__thickness_1__gte=lo,
+                      operation__seam__thickness_1__lte=hi)
+                    | Q(operation__seam__thickness_2__gte=lo,
+                        operation__seam__thickness_2__lte=hi)
                 )
             return qs.distinct()
 

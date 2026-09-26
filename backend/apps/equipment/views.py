@@ -1,5 +1,3 @@
-# apps/equipment/views.py
-
 from rest_framework import viewsets
 
 from .models import Equipment, EquipmentParameter, SpeedUnit
@@ -39,9 +37,10 @@ class EquipmentViewSet(viewsets.ModelViewSet):
     # select_related — для связей «одна к одной стороне» (способ, цех),
     # prefetch_related — для многие-ко-многим. Без них Django полезет
     # в базу отдельно на каждую строку списка
-    queryset = Equipment.objects.select_related("method", "workshop").prefetch_related(
-        "speed_units", "parameters"
-    )
+    queryset = Equipment.objects.select_related(
+        "method", "workstation", "workstation__section", "workstation__section__workshop"
+    ).prefetch_related("speed_units", "parameters")
+    
     serializer_class = EquipmentSerializer
 
     def get_serializer_class(self):
@@ -64,7 +63,11 @@ class EquipmentViewSet(viewsets.ModelViewSet):
 
         workshop = params.get("workshop")
         if workshop:
-            qs = qs.filter(workshop_id=workshop)
+            qs = qs.filter(workstation__section__workshop_id=workshop)
+
+        section = params.get("section")
+        if section:
+            qs = qs.filter(workstation__section_id=section)
 
         if params.get("active") == "1":
             qs = qs.filter(is_active=True)

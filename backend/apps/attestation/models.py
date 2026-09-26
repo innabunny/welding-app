@@ -62,6 +62,20 @@ class Attestation(models.Model):
     valid_until = models.DateField("Действует до", null=True, blank=True)
     protocol_no = models.CharField("№ протокола", max_length=50, blank=True)
     certificate_no = models.CharField("№ удостоверения", max_length=50, blank=True)
+        # --- фаза 2: заполняется после испытаний ---
+    practical_eval = models.CharField(
+        "Оценка практических навыков", max_length=50, blank=True,
+        help_text="Поле 26 протокола",
+    )
+    conclusion = models.TextField(
+        "Заключение о допуске", blank=True,
+        help_text="Поле 28 протокола",
+    )
+
+    # --- комиссия: вписывается вручную тем, кто ведёт протокол ---
+    chairman = models.CharField("Председатель комиссии", max_length=200, blank=True)
+    head_shop = models.CharField("Начальник цеха", max_length=200, blank=True)
+    head_btk = models.CharField("Начальник БТК", max_length=200, blank=True)
 
     class Kind(models.TextChoices):
         PRIMARY = "первичная", "Первичная"
@@ -167,6 +181,39 @@ class AttestationItem(models.Model):
     position = models.CharField("Положение", max_length=50, blank=True)
     preheat = models.CharField("Подогрев", max_length=50, blank=True)
     heat_treatment = models.CharField("Термообработка", max_length=50, blank=True)
+        # --- фаза 2: результаты испытаний, поля 19-25 протокола ---
+    vik_result = models.CharField(
+        "ВИК", max_length=100, blank=True, help_text="Поле 19",
+    )
+    physical_protocol = models.CharField(
+        "Физические методы, № протокола", max_length=100, blank=True,
+        help_text="Поле 20 — РК или УЗК",
+    )
+    metallography_protocol = models.CharField(
+        "Металлография, № протокола", max_length=100, blank=True,
+        help_text="Поле 21",
+    )
+    tensile_strength = models.DecimalField(
+        "Предел прочности, кгс/мм²", max_digits=6, decimal_places=1,
+        null=True, blank=True, help_text="Поле 22 — из протокола испытаний",
+    )
+    bend_angle = models.DecimalField(
+        "Угол загиба, °", max_digits=5, decimal_places=1,
+        null=True, blank=True, help_text="Поле 23",
+    )
+    impact_strength = models.CharField(
+        "Ударная вязкость", max_length=100, blank=True,
+        help_text="Поле 24 — KCU или KCV с температурой",
+    )
+    other_methods = models.CharField(
+        "Другие методы", max_length=200, blank=True, help_text="Поле 25",
+    )
+
+    # снимок требований на момент заполнения: правило могли поменять
+    # позже, а документ должен остаться таким, каким его подписали
+    requirements_snapshot = models.JSONField(
+        "Снимок требований", default=dict, blank=True,
+    )
 
     def save(self, *args, **kwargs):
         if self.wire and not self.wire_text:

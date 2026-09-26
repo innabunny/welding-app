@@ -96,8 +96,23 @@ class SeamSpec(models.Model):
         "materials.Material", on_delete=models.PROTECT, related_name="+",
         null=True, blank=True, verbose_name="Материал 2",
     )
-    thickness = models.DecimalField(
-        "Толщина, мм", max_digits=7, decimal_places=2, null=True, blank=True,
+    thickness_1 = models.DecimalField(
+        "Толщина позиции 1, мм", max_digits=7, decimal_places=2,
+        null=True, blank=True,
+    )
+    thickness_2 = models.DecimalField(
+        "Толщина позиции 2, мм", max_digits=7, decimal_places=2,
+        null=True, blank=True,
+    )
+    pos_1 = models.CharField("Позиция 1", max_length=50, blank=True)
+    mass_1 = models.DecimalField(
+        "Масса позиции 1, кг", max_digits=10, decimal_places=3,
+        null=True, blank=True,
+    )
+    pos_2 = models.CharField("Позиция 2", max_length=50, blank=True)
+    mass_2 = models.DecimalField(
+        "Масса позиции 2, кг", max_digits=10, decimal_places=3,
+        null=True, blank=True,
     )
 
     seam_type = models.CharField(
@@ -117,7 +132,10 @@ class SeamSpec(models.Model):
         verbose_name_plural = "Швы по чертежу"
         ordering = ["part", "number"]
         unique_together = ["part", "number"]
-        indexes = [models.Index(fields=["material_1", "thickness"])]
+        indexes = [
+            models.Index(fields=["material_1", "thickness_1"]),
+            models.Index(fields=["thickness_1"]),
+        ]
 
     def __str__(self):
         return f"{self.part.number} · шов {self.number}"

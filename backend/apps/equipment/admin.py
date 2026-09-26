@@ -4,9 +4,9 @@ from .models import Equipment, SpeedUnit, EquipmentParameter
 
 @admin.register(Equipment)
 class EquipmentAdmin(admin.ModelAdmin):
-    list_display = ("name", "method", "workshop", "has_pulse", "is_active")
-    list_filter = ("method", "workshop", "is_active")
-    list_select_related = ("method", "workshop")
+    list_display = ("name", "method", "workstation", "has_pulse", "is_active")
+    list_filter = ("method", "workstation", "is_active")
+    list_select_related = ("method", "workstation")
     search_fields = ("name", "method__name", "workshop__name")
     filter_horizontal = ("speed_units", "parameters")
 

@@ -76,13 +76,23 @@ class Equipment(models.Model):
     """Сварочная установка."""
 
     name = models.CharField("Название", max_length=200)
-    workshop = models.ForeignKey(
-        "workshops.Workshop",
+    workstation = models.ForeignKey(
+        "workshops.Workstation",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name="equipment",
-        verbose_name="Цех",
+        verbose_name="Рабочее место",
+    )
+
+    # идентификатор узла телеметрии: по нему приходящие данные
+    # находят свой аппарат
+    node_id = models.CharField(
+        "Идентификатор узла телеметрии", max_length=50,
+        blank=True, null=True, unique=True,
+        help_text="MAC или серийный номер платы WT32-ETH01",
+    )
+    node_ip = models.GenericIPAddressField(
+        "IP узла", null=True, blank=True,
     )
     method = models.ForeignKey(
         "methods.WeldingMethod",
@@ -108,6 +118,10 @@ class Equipment(models.Model):
         verbose_name = "Оборудование"
         verbose_name_plural = "Оборудование"
         ordering = ["method", "name"]
+
+    @property
+    def workshop(self):
+        return self.workstation.section.workshop if self.workstation else None
 
     def __str__(self):
         return self.name

@@ -43,7 +43,7 @@ class SeamSpecSerializer(serializers.ModelSerializer):
             "number", "joint_type",
             "material_1_id", "material_1_marka",
             "material_2_id", "material_2_marka",
-            "thickness",
+            "thickness_1", "thickness_2",
             "seam_type", "seam_diameter", "seam_length",
             "operations_count",
         ]
@@ -73,8 +73,11 @@ class OperationSerializer(serializers.ModelSerializer):
         source="seam", queryset=SeamSpec.objects.all(),
     )
     seam_number = serializers.CharField(source="seam.number", read_only=True)
-    seam_thickness = serializers.DecimalField(
-        source="seam.thickness", max_digits=7, decimal_places=2, read_only=True,
+    seam_thickness_1 = serializers.DecimalField(
+        source="seam.thickness_1", max_digits=7, decimal_places=2, read_only=True,
+    )
+    seam_thickness_2 = serializers.DecimalField(
+        source="seam.thickness_2", max_digits=7, decimal_places=2, read_only=True,
     )
 
     # есть ли уже техкарта на эту операцию — видно в списке,
@@ -86,7 +89,7 @@ class OperationSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "part_id", "part_number",
-            "seam_id", "seam_number", "seam_thickness",
+            "seam_id", "seam_number", "seam_thickness_1", "seam_thickness_2",
             "number", "name", "order",
             "required_controls",
             "has_card",

@@ -3,7 +3,7 @@
 from rest_framework import serializers
 
 from apps.methods.models import WeldingMethod
-from apps.workshops.models import Workshop
+from apps.workshops.models import Workstation
 
 from .models import Equipment, EquipmentParameter, SpeedUnit
 
@@ -45,10 +45,20 @@ class EquipmentSerializer(serializers.ModelSerializer):
         source="method.designation", read_only=True, default="",
     )
 
-    workshop_id = serializers.PrimaryKeyRelatedField(
-        source="workshop", queryset=Workshop.objects.all(),
+    workstation_id = serializers.PrimaryKeyRelatedField(
+        source="workstation", queryset=Workstation.objects.all(),
         allow_null=True, required=False,
     )
+    workstation_number = serializers.CharField(
+        source="workstation.number", read_only=True, default="",
+    )
+    workshop_name = serializers.CharField(
+        source="workstation.section.workshop.name", read_only=True, default="",
+    )
+    section_name = serializers.CharField(
+        source="workstation.section.name", read_only=True, default="",
+    )
+
     workshop_name = serializers.CharField(
         source="workshop.name", read_only=True, default="",
     )
@@ -65,7 +75,9 @@ class EquipmentSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name",
             "method_id", "method_name", "method_designation",
-            "workshop_id", "workshop_name",
+            "workstation_id", "workstation_number",
+            "section_name", "workshop_name",
+            "node_id", "node_ip",
             "speed_units", "parameters",
             "has_pulse", "is_active",
         ]

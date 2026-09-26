@@ -96,9 +96,11 @@ class WeldingCardSerializer(serializers.ModelSerializer):
     seam_number = serializers.CharField(
         source="operation.seam.number", read_only=True,
     )
-    seam_thickness = serializers.DecimalField(
-        source="operation.seam.thickness",
-        max_digits=7, decimal_places=2, read_only=True,
+    seam_thickness_1 = serializers.DecimalField(
+        source="seam.thickness_1", max_digits=7, decimal_places=2, read_only=True,
+    )
+    seam_thickness_2 = serializers.DecimalField(
+        source="seam.thickness_2", max_digits=7, decimal_places=2, read_only=True,
     )
     seam_type = serializers.CharField(
         source="operation.seam.seam_type", read_only=True, default="",
@@ -166,7 +168,7 @@ class WeldingCardSerializer(serializers.ModelSerializer):
             # к чему относится — только чтение, кроме самой связи
             "operation_id", "operation_number",
             "part_number", "part_name",
-            "seam_number", "seam_thickness", "seam_type", "seam_diameter",
+            "seam_number", "seam_thickness_1", "seam_thickness_2", "seam_type", "seam_diameter",
             "material_1_marka", "material_2_marka",
             # технология
             "method_id", "method_name", "method_process", "method_tpl_key",
@@ -256,9 +258,11 @@ class WeldingCardListSerializer(serializers.ModelSerializer):
     part_name = serializers.CharField(source="operation.part.name", read_only=True)
     operation_number = serializers.CharField(source="operation.number", read_only=True)
     seam_number = serializers.CharField(source="operation.seam.number", read_only=True)
-    seam_thickness = serializers.DecimalField(
-        source="operation.seam.thickness",
-        max_digits=7, decimal_places=2, read_only=True,
+    seam_thickness_1 = serializers.DecimalField(
+        source="seam.thickness_1", max_digits=7, decimal_places=2, read_only=True,
+    )
+    seam_thickness_2 = serializers.DecimalField(
+        source="seam.thickness_2", max_digits=7, decimal_places=2, read_only=True,
     )
     material_1_marka = serializers.CharField(
         source="operation.seam.material_1.marka", read_only=True, default="",
@@ -277,7 +281,7 @@ class WeldingCardListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "card_no", "revision",
             "part_number", "part_name", "operation_number",
-            "seam_number", "seam_thickness",
+            "seam_number", "seam_thickness_1", "seam_thickness_2",
             "material_1_marka", "material_2_marka",
             "method_name", "equipment_name",
             "passes_count", "is_released",

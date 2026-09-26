@@ -95,9 +95,13 @@ class SeamSpecViewSet(viewsets.ModelViewSet):
         th_from = params.get("thickness_from")
         th_to = params.get("thickness_to")
         if th_from:
-            qs = qs.filter(thickness__gte=th_from)
+            qs = qs.filter(
+                Q(thickness_1__gte=th_from) | Q(thickness_2__gte=th_from)
+            )
         if th_to:
-            qs = qs.filter(thickness__lte=th_to)
+            qs = qs.filter(
+                Q(thickness_1__lte=th_to) | Q(thickness_2__lte=th_to)
+            )
 
         return qs.distinct()
 

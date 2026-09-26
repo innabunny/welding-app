@@ -69,6 +69,8 @@ class AttestationItemSerializer(serializers.ModelSerializer):
         required=False, allow_null=True,
     )
 
+    
+
     class Meta:
         model = AttestationItem
         fields = [
@@ -81,6 +83,9 @@ class AttestationItemSerializer(serializers.ModelSerializer):
             "flux_id", "flux_text",
             "gas_id", "gas_text",
             "position", "preheat", "heat_treatment",
+            "vik_result", "physical_protocol", "metallography_protocol",
+            "tensile_strength", "bend_angle", "impact_strength", "other_methods",
+            "requirements_snapshot",
         ]
         # снимки заполняет save() модели, фронт их не шлёт
         read_only_fields = ["wire_text", "flux_text", "gas_text"]
@@ -142,6 +147,8 @@ class AttestationSerializer(serializers.ModelSerializer):
             "attested_at", "valid_until", "expiry_state",
             "protocol_no", "certificate_no",
             "created_at",
+            "practical_eval", "conclusion",
+            "chairman", "head_shop", "head_btk",
             "items",
         ]
         read_only_fields = ["valid_until", "created_at"]
@@ -156,28 +163,20 @@ class AttestationSerializer(serializers.ModelSerializer):
         return attestation
 
     def update(self, instance, validated_data):
-        # править можно только черновик: у отправленной на испытания
-        # аттестации документы уже ушли, менять их нельзя
+        # в черновике правится всё; после отправки на испытания —
+        # только результаты, статус и реквизиты протокола
         if instance.status != "draft":
-            raise serializers.ValidationError(
-                "Редактировать можно только черновик"
-            )
-
-        items_data = validated_data.pop("items", None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        # образцы пересобираем целиком — их единицы, а порядок важен
-        if items_data is not None:
-            instance.items.all().delete()
-            for item in items_data:
-                item.pop("id", None)
-                AttestationItem(attestation=instance, **item).save()
-
-        return instance
-
+            phase2 = {
+                "status", "attested_at", "protocol_no", "certificate_no",
+                "practical_eval", "conclusion",
+                "chairman", "head_shop", "head_btk", "items",
+            }
+            forbidden = set(validated_data) - phase2
+            if forbidden:
+                raise serializers.ValidationError(
+                    f"После отправки на испытания нельзя менять: "
+                    f"{', '.join(sorted(forbidden))}"
+                )
 
 class AttestationListSerializer(serializers.ModelSerializer):
     """Короткий вид для реестра."""
