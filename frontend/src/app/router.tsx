@@ -6,6 +6,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { EquipmentPage } from '@/pages/EquipmentPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { ReferencesPage } from '@/pages/ReferencesPage'
 import { StubPage } from '@/pages/StubPage'
 
 const stub = (path: string, crumb: string) => ({
@@ -32,7 +33,11 @@ export const router = createBrowserRouter([
       stub(paths.welds, 'Сварные швы'),
       stub(paths.cards, 'Технологические карты'),
       stub(paths.parts, 'Детали и операции'),
-      stub(paths.references, 'Справочники'),
+      {
+        path: paths.references,
+        element: <ReferencesPage />,
+        handle: { crumb: 'Справочники' } satisfies RouteHandle,
+      },
       stub(paths.attestation, 'Аттестация сварщиков'),
       stub(paths.service, 'Заявки на обслуживание'),
       { path: '*', element: <NotFoundPage />, handle: { crumb: 'Не найдено' } satisfies RouteHandle },
