@@ -1,6 +1,9 @@
-import { Moon, Sun } from 'lucide-react'
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react'
 import { useMatches } from 'react-router'
 import { useTheme } from '@/shared/lib/theme'
+import { IconButton } from '@/shared/ui/Button'
+import { SIDEBAR_ID } from './Sidebar'
+import { useSidebar } from './sidebarStore'
 
 export interface RouteHandle {
   crumb: string
@@ -20,12 +23,24 @@ export function Topbar() {
   const crumb = useCrumb()
   const { theme, toggle } = useTheme()
   const dark = theme === 'dark'
+  const { hidden: sidebarHidden, toggle: toggleSidebar } = useSidebar()
 
   return (
     <header className="sticky top-[env(safe-area-inset-top,0px)] z-10 flex h-topbar items-center justify-between gap-4 border-b border-border bg-surface px-4 md:px-7">
-      <nav aria-label="Хлебные крошки" className="truncate text-sm text-muted">
-        Портал / <strong className="font-semibold text-text">{crumb}</strong>
-      </nav>
+      <div className="flex min-w-0 items-center gap-3">
+        <IconButton
+          label={sidebarHidden ? 'Показать меню' : 'Скрыть меню'}
+          aria-expanded={!sidebarHidden}
+          aria-controls={SIDEBAR_ID}
+          onClick={toggleSidebar}
+          className="hidden md:grid"
+        >
+          {sidebarHidden ? <PanelLeftOpen strokeWidth={1.8} /> : <PanelLeftClose strokeWidth={1.8} />}
+        </IconButton>
+        <nav aria-label="Хлебные крошки" className="truncate text-sm text-muted">
+          Портал / <strong className="font-semibold text-text">{crumb}</strong>
+        </nav>
+      </div>
       <button
         type="button"
         onClick={toggle}

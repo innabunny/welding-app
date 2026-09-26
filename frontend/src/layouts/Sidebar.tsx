@@ -18,13 +18,22 @@ function useCounters(): Record<NavCounter, number> {
   }
 }
 
-export function Sidebar() {
+export const SIDEBAR_ID = 'app-sidebar'
+
+/** hidden действует только на десктопе: на телефоне меню — единственная навигация */
+export function Sidebar({ hidden }: { hidden: boolean }) {
   const counters = useCounters()
   const user = useSession((s) => s.user)
   const logout = useLogout()
 
   return (
-    <aside className="flex flex-col border-b border-border bg-surface p-3 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r md:px-3.5 md:py-[22px]">
+    <aside
+      id={SIDEBAR_ID}
+      className={cn(
+        'flex flex-col border-b border-border bg-surface p-3 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r md:px-3.5 md:py-[22px]',
+        hidden && 'md:hidden',
+      )}
+    >
       <div className="hidden items-center gap-3 px-2 pb-[26px] pt-1 md:flex">
         <div className="grid size-[38px] place-items-center rounded-tile bg-primary text-lg font-bold text-white">
           СП
