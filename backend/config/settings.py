@@ -116,11 +116,11 @@ REST_FRAMEWORK = {
         "djangorestframework_camel_case.parser.CamelCaseFormParser",
         "djangorestframework_camel_case.parser.CamelCaseMultiPartParser",
     ),
-    # токен первым: иначе при открытой админке в том же браузере
-    # запросы фронта пойдут через сессию и упрутся в CSRF
+    # только токен. С SessionAuthentication cookie админки (общая для
+    # localhost на всех портах) цепляется к запросам фронта без токена —
+    # например, ко входу — и DRF требует CSRF: 403 «CSRF token missing»
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
