@@ -42,7 +42,7 @@ export const navigation: NavGroup[] = [
     title: 'Производство',
     items: [
       { to: paths.dashboard, label: 'Рабочий стол', icon: House },
-      { to: paths.welds, label: 'Швы и паспорта', icon: Activity },
+      { to: paths.welds, label: 'Сварные швы', icon: Activity },
     ],
   },
   {

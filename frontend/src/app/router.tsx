@@ -29,7 +29,7 @@ export const router = createBrowserRouter([
         element: <EquipmentPage />,
         handle: { crumb: 'Оборудование' } satisfies RouteHandle,
       },
-      stub(paths.welds, 'Швы и паспорта'),
+      stub(paths.welds, 'Сварные швы'),
       stub(paths.cards, 'Технологические карты'),
       stub(paths.parts, 'Детали и операции'),
       stub(paths.references, 'Справочники'),
