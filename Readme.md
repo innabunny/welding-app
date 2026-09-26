@@ -1,7 +1,52 @@
 # welding-backend
 
-Бэкенд сварочного портала: Django + DRF, база SQLite (файл, без отдельного сервера).
+Бэкенд сварочного портала: Django + DRF, база на выбор — PostgreSQL или SQLite.
 API отдаётся под префиксом `/api/`, авторизация — по токену.
+
+---
+
+## Переменные окружения
+
+Все необязательные: без них проект стартует в режиме разработки с Postgres.
+
+| Переменная | По умолчанию | Что значит |
+|---|---|---|
+| `DB_ENGINE` | `postgres` | Какая база: `postgres` или `sqlite` |
+| `DB_HOST` | `localhost` | Postgres: адрес сервера (в Docker — `db`, задано в `docker-compose.yml`) |
+| `DB_PORT` | `5432` | Postgres: порт |
+| `DB_NAME` | `welding` | Postgres: имя базы |
+| `DB_USER` | `welding` | Postgres: пользователь |
+| `DB_PASSWORD` | `welding` | Postgres: пароль |
+| `SQLITE_PATH` | `db.sqlite3` | SQLite: путь к файлу. Относительный считается от папки с `manage.py` |
+| `DEBUG` | `1` | `0` — боевой режим. Тогда обязательны `SECRET_KEY` и `ALLOWED_HOSTS` |
+| `SECRET_KEY` | ключ для разработки | Секрет для подписей. При `DEBUG=0` без него сервер не стартует |
+| `ALLOWED_HOSTS` | пусто | Домены через запятую: `portal.example.ru,10.0.0.5`. При `DEBUG=1` localhost разрешён и так |
+
+SQLite работает в режиме WAL: чтение и запись идут параллельно без «database is locked».
+Рядом с файлом базы появляются `-wal` и `-shm` — это нормально, не удалять при работающем сервере.
+
+### Запуск с Postgres (Docker, как обычно)
+```bash
+docker compose up
+```
+Ничего задавать не нужно.
+
+### Запуск с SQLite (без Docker и без Postgres)
+```bash
+cd backend
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
+export DB_ENGINE=sqlite             # Windows: $env:DB_ENGINE = "sqlite"
+python manage.py migrate
+python manage.py loaddata fixtures/seed.json
+python manage.py runserver
+```
+
+### Запуск с локальным Postgres без Docker
+```bash
+export DB_HOST=localhost DB_NAME=welding DB_USER=welding DB_PASSWORD=welding
+python manage.py migrate && python manage.py runserver
+```
+(`DB_ENGINE` не нужен — Postgres и так по умолчанию.)
 
 ---
 
@@ -44,6 +89,9 @@ pip install -r requirements.txt
 ```
 
 ### 4. Создать базу (применить миграции)
+
+Без Docker сначала выбрать SQLite: `export DB_ENGINE=sqlite`
+(Windows: `$env:DB_ENGINE = "sqlite"`), иначе Django пойдёт в Postgres на localhost.
 
 `db.sqlite3` между машинами НЕ переносится — на каждой машине база создаётся заново
 из файлов миграций.

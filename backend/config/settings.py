@@ -1,20 +1,41 @@
 
 from pathlib import Path
 import os
+
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+# Настройки читаются из окружения. Значения по умолчанию — для разработки:
+# docker compose up и runserver работают без единой переменной.
+# Для продакшена обязательно задать SECRET_KEY, DEBUG=0 и ALLOWED_HOSTS.
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--s%m7erjn^n!*w5lajk*im5jv7zgs0-ubv104(ext=oys9x81c'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
-ALLOWED_HOSTS = []
+
+def env_list(name, default=""):
+    """«a.ru, b.ru» → ["a.ru", "b.ru"]; пустые куски выбрасываем."""
+    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+
+
+DEBUG = env_bool("DEBUG", True)
+
+_DEV_SECRET_KEY = 'django-insecure--s%m7erjn^n!*w5lajk*im5jv7zgs0-ubv104(ext=oys9x81c'
+SECRET_KEY = os.environ.get("SECRET_KEY", _DEV_SECRET_KEY)
+if not DEBUG and SECRET_KEY == _DEV_SECRET_KEY:
+    # ключ из репозитория известен всем — с ним подделываются подписи и сессии
+    raise ImproperlyConfigured("DEBUG выключен: задайте SECRET_KEY в окружении")
+
+# Пусто — при DEBUG Django сам пускает localhost, 127.0.0.1 и [::1].
+# На этом держится прокси Vite: он шлёт Host: localhost
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 
 
 # Application definition
@@ -74,16 +95,46 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "welding"),
-        "USER": os.environ.get("DB_USER", "welding"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "welding"),
-        "HOST": os.environ.get("DB_HOST", "localhost"),
-        "PORT": os.environ.get("DB_PORT", "5432"),
+# DB_ENGINE=postgres (по умолчанию) — сервер из DB_HOST/DB_PORT/DB_NAME/...
+# DB_ENGINE=sqlite — файл SQLITE_PATH, по умолчанию db.sqlite3 рядом с manage.py
+DB_ENGINE = os.environ.get("DB_ENGINE", "postgres").strip().lower()
+
+if DB_ENGINE == "postgres":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "welding"),
+            "USER": os.environ.get("DB_USER", "welding"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", "welding"),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+        }
     }
-}
+elif DB_ENGINE == "sqlite":
+    # относительный путь считаем от manage.py, а не от текущей папки,
+    # иначе запуск из другого каталога молча создаст пустую базу
+    SQLITE_PATH = BASE_DIR / os.environ.get("SQLITE_PATH", "db.sqlite3")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": SQLITE_PATH,
+            "OPTIONS": {
+                # WAL: читатели не ждут писателя и наоборот. Без него
+                # параллельные запросы ловят «database is locked».
+                # init_command выполняется на каждом новом соединении
+                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+                # писатель ждёт освободившуюся базу до 20 с, а не падает сразу
+                "timeout": 20,
+                # запись берёт блокировку в начале транзакции: иначе при
+                # переходе чтения в запись SQLite отдаёт «locked» без ожидания
+                "transaction_mode": "IMMEDIATE",
+            },
+        }
+    }
+else:
+    raise ImproperlyConfigured(
+        f"DB_ENGINE={DB_ENGINE!r}: допустимы только postgres и sqlite"
+    )
 
 
 # Password validation
