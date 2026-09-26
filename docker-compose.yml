@@ -29,5 +29,19 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_TARGET: http://backend:8000
+      VITE_USE_POLLING: "1"
+    volumes:
+      - ./frontend:/app
+      # node_modules остаются из образа: собранные под Linux, а не под macOS
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
