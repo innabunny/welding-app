@@ -1,0 +1,752 @@
+[
+ {
+  "model": "materials.materialgroup",
+  "pk": 1,
+  "fields": {
+   "code": "Стали и никелевые сплавы"
+  }
+ },
+ {
+  "model": "materials.materialgroup",
+  "pk": 2,
+  "fields": {
+   "code": "Титановые сплавы"
+  }
+ },
+ {
+  "model": "materials.materialgroup",
+  "pk": 3,
+  "fields": {
+   "code": "Алюминиевые сплавы"
+  }
+ },
+ {
+  "model": "materials.materialgroup",
+  "pk": 4,
+  "fields": {
+   "code": "Медь и её сплавы"
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 1,
+  "fields": {
+   "marka": "03Х12Н10МТР (ВНС-25)",
+   "group": 1,
+   "tensile_strength": "98.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 2,
+  "fields": {
+   "marka": "03Х12Н9К4МЛ",
+   "group": 1,
+   "tensile_strength": null,
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 3,
+  "fields": {
+   "marka": "06Х15Н6МВФБ (ВНС-16)",
+   "group": 1,
+   "tensile_strength": "118.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 4,
+  "fields": {
+   "marka": "08Х14Н7МЛ (ВНЛ-1)",
+   "group": 1,
+   "tensile_strength": "98.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 5,
+  "fields": {
+   "marka": "12Х18Н10Т",
+   "group": 1,
+   "tensile_strength": "51.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 6,
+  "fields": {
+   "marka": "ХН58МБЮД (ЭК-61)",
+   "group": 1,
+   "tensile_strength": "120.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.material",
+  "pk": 7,
+  "fields": {
+   "marka": "ХН67ВМТЮ (ЭП-202)",
+   "group": 1,
+   "tensile_strength": "93.0",
+   "analogs": []
+  }
+ },
+ {
+  "model": "materials.gasflux",
+  "pk": 1,
+  "fields": {
+   "kind": "gas",
+   "value": "Аргон высшего сорта ГОСТ 10157"
+  }
+ },
+ {
+  "model": "materials.gasflux",
+  "pk": 2,
+  "fields": {
+   "kind": "gas",
+   "value": "Гелий марки А"
+  }
+ },
+ {
+  "model": "materials.gasflux",
+  "pk": 3,
+  "fields": {
+   "kind": "flux",
+   "value": "АН-26С"
+  }
+ },
+ {
+  "model": "materials.gasflux",
+  "pk": 4,
+  "fields": {
+   "kind": "flux",
+   "value": "ОФ-6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 1,
+  "fields": {
+   "marka": "ЭВЛ",
+   "kind": "вольфрам",
+   "diameter": "1.6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 2,
+  "fields": {
+   "marka": "ЭВЛ",
+   "kind": "вольфрам",
+   "diameter": "2.0"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 3,
+  "fields": {
+   "marka": "ЭВЛ",
+   "kind": "вольфрам",
+   "diameter": "3.0"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 4,
+  "fields": {
+   "marka": "ЭВИ-1",
+   "kind": "вольфрам",
+   "diameter": "2.0"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 5,
+  "fields": {
+   "marka": "ЭВИ-1",
+   "kind": "вольфрам",
+   "diameter": "3.0"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 6,
+  "fields": {
+   "marka": "Св-04Х19Н11М3",
+   "kind": "присадочная проволока",
+   "diameter": "1.6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 7,
+  "fields": {
+   "marka": "Св-04Х19Н11М3",
+   "kind": "присадочная проволока",
+   "diameter": "2.0"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 8,
+  "fields": {
+   "marka": "Св-06Х15Н60М15",
+   "kind": "присадочная проволока",
+   "diameter": "1.6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 9,
+  "fields": {
+   "marka": "Св-08Х20Н9Г7Т",
+   "kind": "присадочная проволока",
+   "diameter": "1.2"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 10,
+  "fields": {
+   "marka": "Св-08Х20Н9Г7Т",
+   "kind": "присадочная проволока",
+   "diameter": "1.6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 11,
+  "fields": {
+   "marka": "ЭП-367",
+   "kind": "присадочная проволока",
+   "diameter": "1.6"
+  }
+ },
+ {
+  "model": "materials.fillermaterial",
+  "pk": 12,
+  "fields": {
+   "marka": "ВНС-25",
+   "kind": "присадочная проволока",
+   "diameter": "2.0"
+  }
+ },
+ {
+  "model": "workshops.workshop",
+  "pk": 1,
+  "fields": {
+   "name": "Сварочный цех",
+   "number": "4"
+  }
+ },
+ {
+  "model": "workshops.workshop",
+  "pk": 2,
+  "fields": {
+   "name": "Цех специальных методов сварки",
+   "number": "7"
+  }
+ },
+ {
+  "model": "workshops.section",
+  "pk": 1,
+  "fields": {
+   "workshop": 1,
+   "name": "Аргонодуговая сварка",
+   "number": "1"
+  }
+ },
+ {
+  "model": "workshops.section",
+  "pk": 2,
+  "fields": {
+   "workshop": 1,
+   "name": "Механизированная сварка",
+   "number": "2"
+  }
+ },
+ {
+  "model": "workshops.section",
+  "pk": 3,
+  "fields": {
+   "workshop": 2,
+   "name": "Специальные методы",
+   "number": "1"
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 1,
+  "fields": {
+   "section": 1,
+   "number": "01",
+   "name": "Пост ручной аргонодуговой",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 2,
+  "fields": {
+   "section": 1,
+   "number": "02",
+   "name": "Пост ручной аргонодуговой",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 3,
+  "fields": {
+   "section": 2,
+   "number": "03",
+   "name": "Установка автоматической сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 4,
+  "fields": {
+   "section": 2,
+   "number": "04",
+   "name": "Установка автоматической сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 5,
+  "fields": {
+   "section": 2,
+   "number": "05",
+   "name": "Установка неповоротной сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 6,
+  "fields": {
+   "section": 3,
+   "number": "06",
+   "name": "Камера с контролируемой атмосферой",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 7,
+  "fields": {
+   "section": 2,
+   "number": "07",
+   "name": "Пост полуавтоматической сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 8,
+  "fields": {
+   "section": 2,
+   "number": "08",
+   "name": "Пост полуавтоматической сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 9,
+  "fields": {
+   "section": 3,
+   "number": "09",
+   "name": "Плазменная установка",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 10,
+  "fields": {
+   "section": 3,
+   "number": "10",
+   "name": "Электронно-лучевая установка",
+   "is_active": true
+  }
+ },
+ {
+  "model": "workshops.workstation",
+  "pk": 11,
+  "fields": {
+   "section": 3,
+   "number": "11",
+   "name": "Установка диффузионной сварки",
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "tig1",
+  "fields": {
+   "name": "Ручная аргонодуговая сварка неплавящимся электродом",
+   "designation": "РИН",
+   "process": "tig",
+   "tpl_key": "tig_manual",
+   "order": 1,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "tig2",
+  "fields": {
+   "name": "Механизированная аргонодуговая сварка неплавящимся электродом",
+   "designation": "ИН",
+   "process": "tig",
+   "tpl_key": "tig_auto",
+   "order": 2,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "tig3",
+  "fields": {
+   "name": "Механизированная аргонодуговая сварка неплавящимся электродом в неповоротном положении",
+   "designation": "ИН",
+   "process": "tig",
+   "tpl_key": "tig_orbital",
+   "order": 3,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "tig4",
+  "fields": {
+   "name": "Ручная аргонодуговая сварка неплавящимся электродом в камере с контролируемой атмосферой",
+   "designation": "РИНк",
+   "process": "tig",
+   "tpl_key": "tig_chamber",
+   "order": 4,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "mig",
+  "fields": {
+   "name": "Механизированная сварка плавящимся электродом в защитном газе",
+   "designation": "ИП",
+   "process": "mig",
+   "tpl_key": "mig",
+   "order": 5,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "plasma",
+  "fields": {
+   "name": "Плазменная сварка",
+   "designation": "ПЛ",
+   "process": "plasma",
+   "tpl_key": "plasma",
+   "order": 6,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "ebw",
+  "fields": {
+   "name": "Электронно-лучевая сварка",
+   "designation": "ЭЛ",
+   "process": "ebw",
+   "tpl_key": "ebw",
+   "order": 7,
+   "is_active": true
+  }
+ },
+ {
+  "model": "methods.weldingmethod",
+  "pk": "diff",
+  "fields": {
+   "name": "Диффузионная сварка",
+   "designation": "Дф",
+   "process": "diff",
+   "tpl_key": "diff",
+   "order": 8,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.speedunit",
+  "pk": 1,
+  "fields": {
+   "code": "m_per_h",
+   "name": "м/ч",
+   "is_angular": false,
+   "to_m_per_h": "1.00000000"
+  }
+ },
+ {
+  "model": "equipment.speedunit",
+  "pk": 2,
+  "fields": {
+   "code": "mm_per_s",
+   "name": "мм/с",
+   "is_angular": false,
+   "to_m_per_h": "3.60000000"
+  }
+ },
+ {
+  "model": "equipment.speedunit",
+  "pk": 3,
+  "fields": {
+   "code": "rpm",
+   "name": "об/мин",
+   "is_angular": true,
+   "to_m_per_h": "60.00000000"
+  }
+ },
+ {
+  "model": "equipment.speedunit",
+  "pk": 4,
+  "fields": {
+   "code": "deg_per_s",
+   "name": "град/с",
+   "is_angular": true,
+   "to_m_per_h": "10.00000000"
+  }
+ },
+ {
+  "model": "equipment.equipmentparameter",
+  "pk": 1,
+  "fields": {
+   "code": "osc_amplitude",
+   "name": "Амплитуда колебаний",
+   "unit": "мм",
+   "level": "pass",
+   "printed": true,
+   "order": 1
+  }
+ },
+ {
+  "model": "equipment.equipmentparameter",
+  "pk": 2,
+  "fields": {
+   "code": "osc_speed",
+   "name": "Скорость колебаний",
+   "unit": "мм/с",
+   "level": "pass",
+   "printed": true,
+   "order": 2
+  }
+ },
+ {
+  "model": "equipment.equipmentparameter",
+  "pk": 3,
+  "fields": {
+   "code": "dwell_time",
+   "name": "Задержка в крайних точках",
+   "unit": "с",
+   "level": "pass",
+   "printed": true,
+   "order": 3
+  }
+ },
+ {
+  "model": "equipment.equipmentparameter",
+  "pk": 4,
+  "fields": {
+   "code": "cyclogram",
+   "name": "Циклограмма",
+   "unit": "",
+   "level": "card",
+   "printed": true,
+   "order": 4
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 1,
+  "fields": {
+   "name": "Tetrix 300 AC/DC",
+   "method": "tig1",
+   "workstation": 1,
+   "speed_units": [
+    1
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 2,
+  "fields": {
+   "name": "Tetrix 351 AC/DC",
+   "method": "tig1",
+   "workstation": 2,
+   "speed_units": [
+    1
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 3,
+  "fields": {
+   "name": "УСГА 222",
+   "method": "tig2",
+   "workstation": 3,
+   "speed_units": [
+    1,
+    3
+   ],
+   "parameters": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 4,
+  "fields": {
+   "name": "УСН 222",
+   "method": "tig2",
+   "workstation": 4,
+   "speed_units": [
+    1,
+    3
+   ],
+   "parameters": [
+    1,
+    2
+   ],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 5,
+  "fields": {
+   "name": "С5902",
+   "method": "tig3",
+   "workstation": 5,
+   "speed_units": [
+    2
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 6,
+  "fields": {
+   "name": "ВКС 222",
+   "method": "tig4",
+   "workstation": 6,
+   "speed_units": [
+    1
+   ],
+   "parameters": [],
+   "has_pulse": false,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 7,
+  "fields": {
+   "name": "УСГ 222",
+   "method": "mig",
+   "workstation": 7,
+   "speed_units": [
+    1,
+    3
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 8,
+  "fields": {
+   "name": "ESAB",
+   "method": "mig",
+   "workstation": 8,
+   "speed_units": [
+    1,
+    3
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 9,
+  "fields": {
+   "name": "SBI",
+   "method": "plasma",
+   "workstation": 9,
+   "speed_units": [
+    1
+   ],
+   "parameters": [],
+   "has_pulse": true,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 10,
+  "fields": {
+   "name": "ТЕТА",
+   "method": "ebw",
+   "workstation": 10,
+   "speed_units": [
+    4
+   ],
+   "parameters": [],
+   "has_pulse": false,
+   "is_active": true
+  }
+ },
+ {
+  "model": "equipment.equipment",
+  "pk": 11,
+  "fields": {
+   "name": "УДВ 222",
+   "method": "diff",
+   "workstation": 11,
+   "speed_units": [],
+   "parameters": [],
+   "has_pulse": false,
+   "is_active": true
+  }
+ }
+]
