@@ -8,3 +8,9 @@ export interface Workstation {
   equipmentCount: number
   isActive: boolean
 }
+
+export interface Workshop {
+  id: number
+  name: string
+  number: string
+}

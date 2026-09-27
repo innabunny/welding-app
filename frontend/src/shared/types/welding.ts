@@ -1,4 +1,4 @@
-import type { DecimalString, IsoDateTime } from './common'
+import type { DecimalString, IsoDate, IsoDateTime } from './common'
 
 export type WeldStatus = 'in_work' | 'done' | 'accepted' | 'rejected'
 
@@ -9,9 +9,31 @@ export interface Weld {
   partNumber: string
   serialNo: string
   seamNumber: string
+  seamThickness1: DecimalString | null
+  seamThickness2: DecimalString | null
   status: WeldStatus
   runsCount: number
   createdAt: IsoDateTime
+}
+
+export type InstanceKind = 'штатное' | 'свидетель'
+
+/** Паспорт шва: план, факт и контроль одним ответом — собирается из связей */
+export interface WeldPassport extends Weld {
+  partName: string
+  instanceKind: InstanceKind
+  material1Marka: string
+  material2Marka: string
+  jointType: string
+  seamType: string
+  seamLength: DecimalString | null
+  operations: OperationRun[]
+}
+
+export interface WeldFilters {
+  search?: string
+  part?: string
+  status?: WeldStatus | ''
 }
 
 /** GET /welds/awaiting_control/ — операция выполнена, заключения нет */
@@ -32,21 +54,40 @@ export interface AwaitingControl {
 }
 
 export type InspectionResult = 'годен' | 'исправление' | 'брак'
+export type InspectionKind = 'промежуточный' | 'окончательный'
+export type InspectionMethod = 'ВИК' | 'РК' | 'УЗК' | 'ПВК' | 'МК'
+export type InspectionSpecimen = 'шов' | 'свидетель' | 'вырезка'
+
+/** Дефект: набор полей у разных типов разный, классификатора пока нет */
+export type Defect = Record<string, unknown>
 
 export interface Inspection {
   id: number
   runId: number
-  kind: string
+  kind: InspectionKind
   kindDisplay: string
-  method: string
+  method: InspectionMethod
   methodDisplay: string
-  specimen: string
+  specimen: InspectionSpecimen
   result: InspectionResult
   resultDisplay: string
-  defects: string
+  defects: Defect[]
   reportNo: string
-  inspectedAt: IsoDateTime | null
+  inspectedAt: IsoDate | null
   inspectorName: string
+  conclusion: string
+}
+
+/** Тело POST: контролёра сервер подставит сам */
+export interface InspectionCreate {
+  runId: number
+  kind: InspectionKind
+  method: InspectionMethod
+  specimen: InspectionSpecimen
+  result: InspectionResult
+  defects: Defect[]
+  reportNo: string
+  inspectedAt: IsoDate | null
   conclusion: string
 }
 
@@ -58,8 +99,9 @@ export interface CurrentRange {
 
 export interface ActualCurrent {
   avg: number
-  min: number
-  max: number
+  /** Могут не прийти от узла — тогда null */
+  min: number | null
+  max: number | null
 }
 
 export interface Deviation {

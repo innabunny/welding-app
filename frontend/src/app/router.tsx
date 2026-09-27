@@ -2,6 +2,8 @@ import { createBrowserRouter } from 'react-router'
 import { AppLayout } from '@/layouts/AppLayout'
 import { paths } from '@/layouts/navigation'
 import type { RouteHandle } from '@/layouts/Topbar'
+import { AttestationEditPage } from '@/pages/AttestationEditPage'
+import { AttestationPage } from '@/pages/AttestationPage'
 import { CardEditPage } from '@/pages/CardEditPage'
 import { CardSheetPage } from '@/pages/CardSheetPage'
 import { CardsPage } from '@/pages/CardsPage'
@@ -14,6 +16,8 @@ import { PartsPage } from '@/pages/PartsPage'
 import { MaterialsPage } from '@/pages/MaterialsPage'
 import { ServicePage } from '@/pages/ServicePage'
 import { StubPage } from '@/pages/StubPage'
+import { WeldPage } from '@/pages/WeldPage'
+import { WeldsPage } from '@/pages/WeldsPage'
 
 const stub = (path: string, crumb: string) => ({
   path,
@@ -36,7 +40,17 @@ export const router = createBrowserRouter([
         element: <EquipmentPage />,
         handle: { crumb: 'Оборудование' } satisfies RouteHandle,
       },
-      stub(paths.welds, 'Сварные швы'),
+      {
+        path: paths.welds,
+        element: <WeldsPage />,
+        handle: { crumb: 'Сварные швы' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.welds}/:id`,
+        element: <WeldPage />,
+        handle: { crumb: 'Паспорт шва' } satisfies RouteHandle,
+      },
+      stub(paths.telemetry, 'Телеметрия'),
       {
         path: paths.cards,
         element: <CardsPage />,
@@ -72,7 +86,21 @@ export const router = createBrowserRouter([
         element: <MaterialsPage />,
         handle: { crumb: 'Справочники' } satisfies RouteHandle,
       },
-      stub(paths.attestation, 'Аттестация сварщиков'),
+      {
+        path: paths.attestation,
+        element: <AttestationPage />,
+        handle: { crumb: 'Аттестация сварщиков' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.attestation}/new`,
+        element: <AttestationEditPage />,
+        handle: { crumb: 'Новая аттестация' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.attestation}/:id`,
+        element: <AttestationEditPage />,
+        handle: { crumb: 'Аттестация' } satisfies RouteHandle,
+      },
       {
         path: paths.service,
         element: <ServicePage />,

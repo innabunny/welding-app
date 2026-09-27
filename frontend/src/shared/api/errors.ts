@@ -36,3 +36,24 @@ export function errorMessage(error: unknown): string {
   if (error.response.status >= 500) return 'Ошибка сервера'
   return `Ошибка запроса (${error.response.status})`
 }
+
+/**
+ * Ошибки по вложенному списку (проходы, образцы): по индексу элемента.
+ * DRF отдаёт их и массивом, и словарём {"0": {...}} — разбираем оба.
+ */
+export function listErrors(error: unknown, key: string): Record<string, string>[] {
+  const out: Record<string, string>[] = []
+  if (!(error instanceof AxiosError) || !isErrorBody(error.response?.data)) return out
+  const raw: unknown = error.response.data[key]
+  if (!raw || typeof raw !== 'object' || (Array.isArray(raw) && typeof raw[0] === 'string')) return out
+  for (const [index, item] of Object.entries(raw as Record<string, unknown>)) {
+    const fields: Record<string, string> = {}
+    if (item && typeof item === 'object')
+      for (const [field, value] of Object.entries(item as Record<string, unknown>)) {
+        const message = Array.isArray(value) ? value[0] : value
+        if (typeof message === 'string') fields[field] = message
+      }
+    out[Number(index)] = fields
+  }
+  return out
+}

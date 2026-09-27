@@ -2,6 +2,7 @@ import {
   Activity,
   AlignLeft,
   FileText,
+  Gauge,
   House,
   Layers,
   UserRound,
@@ -13,6 +14,7 @@ import {
 export const paths = {
   dashboard: '/',
   welds: '/welds',
+  telemetry: '/telemetry',
   cards: '/cards',
   parts: '/parts',
   materials: '/materials',
@@ -43,6 +45,7 @@ export const navigation: NavGroup[] = [
     items: [
       { to: paths.dashboard, label: 'Рабочий стол', icon: House },
       { to: paths.welds, label: 'Сварные швы', icon: Activity },
+      { to: paths.telemetry, label: 'Телеметрия', icon: Gauge },
     ],
   },
   {
