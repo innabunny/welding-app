@@ -147,7 +147,7 @@ class PartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Part
         fields = [
-            "id", "number", "name", "drawing_no", "note", "is_active",
+            "id", "number", "name", "note", "is_active",
             "seams_count", "operations_count",
         ]
 

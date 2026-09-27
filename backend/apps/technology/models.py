@@ -20,7 +20,6 @@ class Part(models.Model):
 
     number = models.CharField("№ по чертежу", max_length=100, unique=True)
     name = models.CharField("Наименование", max_length=200)
-    drawing_no = models.CharField("Обозначение чертежа", max_length=100, blank=True)
     note = models.TextField("Примечание", blank=True)
     is_active = models.BooleanField("В производстве", default=True)
 

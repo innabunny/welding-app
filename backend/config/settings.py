@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'apps.workshops',
     'apps.methods',
     "apps.service",
+    "apps.demo",
 ]
 
 MIDDLEWARE = [

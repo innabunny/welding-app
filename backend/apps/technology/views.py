@@ -43,11 +43,7 @@ class PartViewSet(viewsets.ModelViewSet):
 
         search = params.get("search")
         if search:
-            qs = qs.filter(
-                Q(number__icontains=search)
-                | Q(name__icontains=search)
-                | Q(drawing_no__icontains=search)
-            )
+            qs = qs.filter(Q(number__icontains=search) | Q(name__icontains=search))
 
         if params.get("active") == "1":
             qs = qs.filter(is_active=True)
