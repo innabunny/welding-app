@@ -4,7 +4,6 @@ export interface Part {
   id: number
   number: string
   name: string
-  drawingNo: string
   note: string
   isActive: boolean
   seamsCount: number
@@ -63,7 +62,6 @@ export interface PartDetail extends Part {
 export interface PartWrite {
   number: string
   name: string
-  drawingNo: string
   note: string
   isActive: boolean
 }

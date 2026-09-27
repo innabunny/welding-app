@@ -23,7 +23,17 @@ export function FieldBox({ label, unit, required, error, note, className, childr
   const id = useId()
   const errorId = `${id}-error`
   return (
-    <div className={cn('grid content-start gap-1.5', className)}>
+    // min-w-0 и колонка minmax(0,1fr): поле сжимается до своей колонки,
+    // а не растягивает её под длинное содержимое.
+    // row-span-4 + subgrid: подпись, поле, ошибка и пояснение делят строки
+    // с соседями по сетке — если подпись перенеслась, поля ввода всё равно
+    // стоят на одной линии. Вне сетки эти классы ни на что не влияют
+    <div
+      className={cn(
+        'row-span-4 grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid content-start gap-1.5',
+        className,
+      )}
+    >
       <label htmlFor={id} className="text-caption font-semibold text-muted">
         {label}
         {unit && <span className="font-normal">, {unit}</span>}

@@ -258,14 +258,16 @@ export function Select({
         onClick={() => (open ? closeList() : openList())}
         onKeyDown={onKeyDown}
         className={cn(
-          'flex h-9 w-full items-center gap-2 rounded-control border bg-surface pl-3 pr-2 text-left text-sm text-text',
+          'flex h-9 w-full min-w-0 items-center gap-2 rounded-control border bg-surface pl-3 pr-2 text-left text-sm text-text',
           'hover:border-primary/60 focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60',
           open && 'border-primary',
           invalid ? 'border-danger' : !open && 'border-border',
           className,
         )}
       >
-        <span className={cn('min-w-0 flex-1 truncate', (placeholder || !selected) && 'text-muted')}>
+        {/* w-0 + flex-1: текст не распирает кнопку — иначе длинное значение
+            задаёт минимальную ширину и селект залезает на соседнюю колонку */}
+        <span className={cn('w-0 flex-1 truncate', (placeholder || !selected) && 'text-muted')}>
           {selected?.label || ' '}
         </span>
         <ChevronDown

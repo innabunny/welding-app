@@ -44,7 +44,7 @@ export function Sidebar({ hidden }: { hidden: boolean }) {
         </div>
       </div>
 
-      <nav aria-label="Разделы" className="flex gap-0.5 overflow-x-auto md:block md:overflow-y-auto">
+      <nav aria-label="Разделы" className="flex gap-0.5 overflow-x-auto md:block md:overflow-y-auto md:overflow-x-hidden">
         {navigation.map((group) => (
           <div key={group.title} className="contents md:block">
             <div className="mx-2 mb-1.5 mt-3.5 hidden text-xs font-semibold text-muted md:block">
@@ -68,9 +68,9 @@ export function Sidebar({ hidden }: { hidden: boolean }) {
                       }
                     >
                       <Icon className="size-[17px] shrink-0" strokeWidth={1.8} aria-hidden />
-                      {label}
+                      <span className="md:min-w-0 md:truncate">{label}</span>
                       {count > 0 && (
-                        <span className="ml-auto rounded-full bg-danger-soft px-[7px] py-px text-xs font-semibold text-danger">
+                        <span className="ml-auto shrink-0 rounded-full bg-danger-soft px-[7px] py-px text-xs font-semibold text-danger">
                           {count}
                         </span>
                       )}

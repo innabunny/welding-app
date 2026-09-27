@@ -20,6 +20,8 @@ import { OriginBlock } from './OriginBlock'
 import { PassCard } from './PassCard'
 import { useOperation, useOperations, useSaveWeldingCard, useSeam } from './queries'
 import { SimilarPanel } from './SimilarPanel'
+import { GrooveEditor } from './groove/GrooveEditor'
+import { grooveParams, grooveSvg } from './groove/grooveSvg'
 
 interface Props {
   /** Сохранённая карта; undefined — новая */
@@ -56,6 +58,9 @@ export function CardForm({ card, preset }: Props) {
   const equipmentUnits = (speedUnits.data ?? []).filter((u) => equipment?.speedUnits.includes(u.id))
   const pulseAllowed = equipment?.hasPulse === true
   const seamDiameter = seam?.seamDiameter ?? card?.seamDiameter ?? null
+  const toMm = (v: string | null | undefined) => (v === null || v === undefined ? null : Number(v))
+  const s1 = toMm(seam?.thickness1 ?? card?.seamThickness1)
+  const s2 = toMm(seam?.thickness2 ?? card?.seamThickness2)
 
   const lookups: Lookups = {
     tungsten: (fillers.data ?? []).filter((f) => f.kind === 'вольфрам'),
@@ -123,7 +128,18 @@ export function CardForm({ card, preset }: Props) {
     if (Object.keys(found).length > 0 || !method) return
 
     save.mutate(
-      { id: card?.id ?? null, body: { ...prune(draft, method, mode), cardNo: draft.cardNo.trim() } },
+      {
+        id: card?.id ?? null,
+        body: {
+          ...prune(draft, method, mode),
+          cardNo: draft.cardNo.trim(),
+          // эскиз — из текущих размеров и толщин шва; без типа разделки его нет
+          grooveSvg: (() => {
+            const params = grooveParams(draft, s1, s2, draft.passes.length)
+            return params ? grooveSvg(params) : ''
+          })(),
+        },
+      },
       {
         onSuccess: (saved) => {
           if (!card) navigate(`/cards/${saved.id}`, { replace: true })
@@ -322,6 +338,12 @@ export function CardForm({ card, preset }: Props) {
               </div>
             </Card>
           ))}
+
+          <Card className="p-5">
+            <h2 className="mb-1 text-lg font-heading">Разделка кромок</h2>
+            <p className="mb-4 text-xs text-muted">Выберите тип и размеры — эскиз сечения нарисуется сам.</p>
+            <GrooveEditor draft={draft} update={update} s1={s1} s2={s2} passes={draft.passes.length} errors={errors} />
+          </Card>
 
           <Card className="grid gap-4 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">

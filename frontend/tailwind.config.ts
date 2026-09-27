@@ -116,9 +116,9 @@ export default {
       fontWeight: { heading: '650' },
       letterSpacing: { heading: '-.02em', number: '-.03em' },
       maxWidth: { content: '1380px' },
-      width: { sidebar: '252px' },
+      width: { sidebar: '280px' },
       height: { topbar: '64px' },
-      gridTemplateColumns: { app: '252px minmax(0, 1fr)' },
+      gridTemplateColumns: { app: '280px minmax(0, 1fr)' },
       keyframes: {
         'toast-in': {
           from: { opacity: '0', transform: 'translateY(8px)' },

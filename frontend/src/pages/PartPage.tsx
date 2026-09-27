@@ -31,7 +31,6 @@ function materials(s: SeamSpec): string {
 const toPartWrite = (p: PartDetail): PartWrite => ({
   number: p.number,
   name: p.name,
-  drawingNo: p.drawingNo,
   note: p.note,
   isActive: p.isActive,
 })
@@ -109,10 +108,7 @@ export function PartPage() {
             <span>{p.name}</span>
             <Badge tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'В производстве' : 'Снята'}</Badge>
           </h1>
-          <p className="text-nav text-muted">
-            {p.drawingNo ? `Чертёж ${p.drawingNo}` : 'Чертёж не указан'}
-            {p.note && <span className="block whitespace-pre-line text-sm">{p.note}</span>}
-          </p>
+          {p.note && <p className="whitespace-pre-line text-nav text-muted">{p.note}</p>}
         </div>
         {canEdit && (
           <Button variant="secondary" icon={<Pencil />} onClick={() => setEditingPart({ id: p.id, initial: toPartWrite(p) })}>

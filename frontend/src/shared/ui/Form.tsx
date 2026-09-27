@@ -20,7 +20,9 @@ export function Field({ label, error, hint, required, className, children }: Fie
   const noteId = `${id}-note`
   const note = error ?? hint
   return (
-    <div className={cn('grid content-start gap-1.5', className)}>
+    // min-w-0 и колонка minmax(0,1fr): поле сжимается до своей колонки,
+    // а не растягивает её под длинное содержимое
+    <div className={cn('grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-1.5', className)}>
       <label htmlFor={id} className="text-caption font-semibold text-muted">
         {label}
         {required && <span className="text-danger"> *</span>}

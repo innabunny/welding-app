@@ -57,7 +57,6 @@ export function PartsPage() {
           <tr>
             <Th>№ по чертежу</Th>
             <Th>Наименование</Th>
-            <Th>Чертёж</Th>
             <Th className="text-right">Швов</Th>
             <Th className="text-right">Операций</Th>
             <Th>Статус</Th>
@@ -81,7 +80,6 @@ export function PartsPage() {
                 </a>
               </Td>
               <Td>{p.name}</Td>
-              <Td className="font-mono text-xs">{p.drawingNo || <span className="text-muted">—</span>}</Td>
               <Td className="text-right font-mono">{p.seamsCount}</Td>
               <Td className="text-right font-mono">{p.operationsCount}</Td>
               <Td>
@@ -101,7 +99,7 @@ export function PartsPage() {
           <p className="text-nav text-muted">
             {parts.data
               ? `${parts.data.length} ${plural(parts.data.length, ['деталь', 'детали', 'деталей'])}${filtered ? ' по фильтру' : ''}`
-              : 'Детали по чертежам, их швы и техпроцесс'}
+              : 'Детали, их швы и техпроцесс'}
           </p>
         </div>
         {canEdit && (
@@ -120,8 +118,8 @@ export function PartsPage() {
             />
             <Input
               type="search"
-              aria-label="Поиск по номеру, наименованию или чертежу"
-              placeholder="Номер, наименование или чертёж"
+              aria-label="Поиск по номеру или наименованию"
+              placeholder="№ по чертежу или наименование"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"

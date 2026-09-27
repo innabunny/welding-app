@@ -77,6 +77,16 @@ export interface WeldingCardWrite {
   fluxId: number | null
   plasmaNozzleD: DecimalString | null
   heatTreatment: string
+  // разделка кромок: '' — эскиза нет; I / V / X — тип разделки
+  grooveType: string
+  grooveAngle: DecimalString | null
+  grooveGap: DecimalString | null
+  grooveRoot: DecimalString | null
+  grooveCap: DecimalString | null
+  grooveRootCap: DecimalString | null
+  grooveWidth: DecimalString | null
+  /** Эскиз сечения — строится из параметров при сохранении */
+  grooveSvg: string
   extra: ExtraValues
   passes: WeldPass[]
   isReleased: boolean
@@ -102,8 +112,6 @@ export interface WeldingCard extends WeldingCardWrite {
   /** Обозначение с суффиксом п/б — собирает сервер */
   designation: string
   equipmentName: string
-  /** Эскиз разделки — SVG-разметка, только чтение */
-  grooveSvg: string
   // текстовые снимки справочников: печатаются в бланке
   tungstenText: string
   fillerText: string

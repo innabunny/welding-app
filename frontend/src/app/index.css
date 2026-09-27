@@ -13,6 +13,35 @@
     @apply rounded-sm outline outline-2 outline-offset-2 outline-primary;
   }
 
+  /*
+   * Тонкие скроллбары везде. Chrome и Safari — через ::-webkit-scrollbar:
+   * там задаётся точная ширина. Стандартные scrollbar-width/color — только
+   * для Firefox: если их увидит Chrome, он проигнорирует webkit-настройки.
+   */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgb(var(--c-border));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--c-muted) / 0.6);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(var(--c-border)) transparent;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * {
       transition: none !important;

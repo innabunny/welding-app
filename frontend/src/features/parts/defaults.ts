@@ -1,7 +1,7 @@
 import type { PartWrite, SeamWrite } from '@/shared/types/technology'
 
 /** Пустые черновики для форм «Новая деталь» и «Новый шов» */
-export const emptyPart: PartWrite = { number: '', name: '', drawingNo: '', note: '', isActive: true }
+export const emptyPart: PartWrite = { number: '', name: '', note: '', isActive: true }
 
 export const emptySeam = (partId: number): SeamWrite => ({
   partId,

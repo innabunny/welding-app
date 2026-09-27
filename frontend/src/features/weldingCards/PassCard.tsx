@@ -109,7 +109,9 @@ function SpeedBlock({ spec, pass, saved, speedUnits, equipmentChosen, seamDiamet
     errors.speedUnitId ?? (foreignUnit ? 'У выбранной установки нет этой единицы' : undefined)
 
   return (
-    <div className="grid gap-x-4 sm:col-span-2 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)_minmax(0,1fr)] lg:col-span-3">
+    // подсетка — только в ряд: на телефоне три поля стоят столбиком, им нужно
+    // 12 строк, а подсетка дала бы 4 — поля наехали бы друг на друга
+    <div className="grid gap-x-4 sm:col-span-2 sm:row-span-4 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)_minmax(0,1fr)] sm:grid-rows-subgrid lg:col-span-3">
       <FieldBox label="Единица скорости" error={unitError}>
         {(id, describedBy) => (
           <Select
@@ -139,7 +141,8 @@ function SpeedBlock({ spec, pass, saved, speedUnits, equipmentChosen, seamDiamet
         onChange={(min, max) => onChange({ ...pass, speedRawMin: min, speedRawMax: max })}
         serverError={errors.speedRawMin ?? errors.speedRawMax}
       />
-      <div className="grid content-start gap-1.5">
+      {/* не FieldBox, но стоит в ряду с ними — на тех же строках сетки */}
+      <div className="row-span-4 grid grid-rows-subgrid content-start gap-1.5">
         <span className="text-caption font-semibold text-muted">Скорость, м/ч</span>
         <MetersPerHour pass={pass} saved={saved} unit={unit} seamDiameter={seamDiameter} />
         <Checkbox

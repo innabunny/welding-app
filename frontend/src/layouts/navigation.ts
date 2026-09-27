@@ -57,7 +57,7 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    title: 'Персонал и парк',
+    title: 'Персонал и оборудование',
     items: [
       { to: paths.attestation, label: 'Аттестация сварщиков', icon: UserRound, counter: 'attestation' },
       { to: paths.equipment, label: 'Оборудование', icon: Zap },

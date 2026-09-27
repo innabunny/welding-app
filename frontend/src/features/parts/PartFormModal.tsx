@@ -32,12 +32,11 @@ export function PartFormModal({ editing, onClose, onCreated }: Props) {
         ...d,
         number: d.number.trim(),
         name: d.name.trim(),
-        drawingNo: d.drawingNo.trim(),
         note: d.note.trim(),
       })}
     >
       {({ draft, update, errors }) => (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <Field label="№ по чертежу" required error={errors.number}>
             {(id, describedBy) => (
               <Input
@@ -52,20 +51,7 @@ export function PartFormModal({ editing, onClose, onCreated }: Props) {
               />
             )}
           </Field>
-          <Field label="Обозначение чертежа" error={errors.drawingNo}>
-            {(id, describedBy) => (
-              <Input
-                id={id}
-                aria-describedby={describedBy}
-                invalid={Boolean(errors.drawingNo)}
-                maxLength={100}
-                value={draft.drawingNo}
-                className="font-mono"
-                onChange={(e) => update({ drawingNo: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label="Наименование" required error={errors.name} className="sm:col-span-2">
+          <Field label="Наименование" required error={errors.name}>
             {(id, describedBy) => (
               <Input
                 id={id}
