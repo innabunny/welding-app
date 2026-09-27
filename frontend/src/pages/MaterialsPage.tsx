@@ -4,15 +4,16 @@ import {
   EquipmentParametersTab,
   SpeedUnitsTab,
   WeldingMethodsTab,
-} from '@/features/references/EquipmentTabs'
+} from '@/features/materials/EquipmentTabs'
 import {
   FillerMaterialsTab,
   GasFluxTab,
   MaterialGroupsTab,
   MaterialsTab,
-} from '@/features/references/MaterialTabs'
-import type { TabProps } from '@/features/references/ReferenceList'
+} from '@/features/materials/MaterialTabs'
+import type { TabProps } from '@/features/materials/MaterialList'
 import { useSession } from '@/shared/api/session'
+import { canEditTechnology } from '@/features/auth/roles'
 import { cn } from '@/shared/lib/cn'
 import { Card } from '@/shared/ui/Card'
 
@@ -44,13 +45,13 @@ const groups: { title: string; tabs: Tab[] }[] = [
 
 const allTabs = groups.flatMap((g) => g.tabs)
 
-export function ReferencesPage() {
+export function MaterialsPage() {
   // вкладка в адресе: ссылкой можно поделиться, «назад» возвращает на прошлую
   const [params, setParams] = useSearchParams()
   const active = allTabs.find((t) => t.id === params.get('tab')) ?? allTabs[0]!
   const [search, setSearch] = useState('')
-  // материалы на бэке правит только администратор
-  const canEdit = useSession((s) => s.user?.role === 'admin')
+  // справочники правят администратор и технолог — как на бэке
+  const canEdit = useSession((s) => canEditTechnology(s.user?.role))
 
   const select = (id: string) => {
     setSearch('')
@@ -66,7 +67,7 @@ export function ReferencesPage() {
         <p className="text-nav text-muted">
           {canEdit
             ? 'Материалы, способы сварки и параметры оборудования'
-            : 'Просмотр. Изменять справочники может администратор'}
+            : 'Просмотр. Изменять справочники могут администратор и технолог'}
         </p>
       </div>
 

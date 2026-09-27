@@ -12,6 +12,7 @@ import type {
 import { Badge } from '@/shared/ui/Badge'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Field, Input, Select } from '@/shared/ui/Form'
+import { FormModal, type Editing, type Errors } from '@/shared/ui/FormModal'
 import { Table, Td, Th, Tr } from '@/shared/ui/Table'
 import {
   useFillerMaterials,
@@ -24,8 +25,7 @@ import {
   useSaveMaterialGroup,
 } from './queries'
 import { isBadDecimal, toDecimal } from './decimal'
-import { ReferenceFormModal, type Editing, type Errors } from './ReferenceFormModal'
-import { ReferenceList, Toolbar, type TabProps } from './ReferenceList'
+import { MaterialList, Toolbar, type TabProps } from './MaterialList'
 
 const fillerKindLabels: Record<FillerKind, string> = {
   'присадочная проволока': 'Присадочная проволока',
@@ -83,7 +83,7 @@ export function MaterialsTab({ search, onSearch, canEdit }: TabProps) {
         placeholder="Поиск по марке или группе"
         action={canEdit && <AddButton label="Добавить материал" onClick={add} />}
       />
-      <ReferenceList
+      <MaterialList
         query={materials}
         search={search}
         text={(m) => `${m.marka} ${m.groupCode ?? ''}`}
@@ -128,9 +128,9 @@ export function MaterialsTab({ search, onSearch, canEdit }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
 
-      <ReferenceFormModal
+      <FormModal
         editing={editing}
         onClose={() => setEditing(null)}
         newTitle="Новый материал"
@@ -192,7 +192,7 @@ export function MaterialsTab({ search, onSearch, canEdit }: TabProps) {
             </Field>
           </div>
         )}
-      </ReferenceFormModal>
+      </FormModal>
     </>
   )
 }
@@ -221,7 +221,7 @@ export function MaterialGroupsTab({ search, onSearch, canEdit }: TabProps) {
           )
         }
       />
-      <ReferenceList
+      <MaterialList
         query={groups}
         search={search}
         text={(g) => g.code}
@@ -253,9 +253,9 @@ export function MaterialGroupsTab({ search, onSearch, canEdit }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
 
-      <ReferenceFormModal
+      <FormModal
         editing={editing}
         onClose={() => setEditing(null)}
         newTitle="Новая группа"
@@ -278,7 +278,7 @@ export function MaterialGroupsTab({ search, onSearch, canEdit }: TabProps) {
             )}
           </Field>
         )}
-      </ReferenceFormModal>
+      </FormModal>
     </>
   )
 }
@@ -304,7 +304,7 @@ export function FillerMaterialsTab({ search, onSearch, canEdit }: TabProps) {
           )
         }
       />
-      <ReferenceList
+      <MaterialList
         query={fillers}
         search={search}
         text={(f) => `${f.label} ${fillerKindLabels[f.kind] ?? f.kind}`}
@@ -340,9 +340,9 @@ export function FillerMaterialsTab({ search, onSearch, canEdit }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
 
-      <ReferenceFormModal
+      <FormModal
         editing={editing}
         onClose={() => setEditing(null)}
         newTitle="Новый сварочный материал"
@@ -400,7 +400,7 @@ export function FillerMaterialsTab({ search, onSearch, canEdit }: TabProps) {
             </Field>
           </div>
         )}
-      </ReferenceFormModal>
+      </FormModal>
     </>
   )
 }
@@ -427,7 +427,7 @@ export function GasFluxTab({ search, onSearch, canEdit }: TabProps) {
           )
         }
       />
-      <ReferenceList
+      <MaterialList
         query={gasFlux}
         search={search}
         text={(g) => g.value}
@@ -462,9 +462,9 @@ export function GasFluxTab({ search, onSearch, canEdit }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
 
-      <ReferenceFormModal
+      <FormModal
         editing={editing}
         onClose={() => setEditing(null)}
         newTitle="Новый газ или флюс"
@@ -506,7 +506,7 @@ export function GasFluxTab({ search, onSearch, canEdit }: TabProps) {
             </Field>
           </div>
         )}
-      </ReferenceFormModal>
+      </FormModal>
     </>
   )
 }

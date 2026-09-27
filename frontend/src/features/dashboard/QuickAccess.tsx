@@ -16,7 +16,7 @@ const links: QuickLink[] = [
   { to: paths.cards, icon: FilePlus, title: 'Новая техкарта', note: 'на операцию детали' },
   { to: paths.cards, icon: Search, title: 'Подбор режима', note: 'по марке и толщине' },
   { to: paths.welds, icon: Activity, title: 'Паспорт шва', note: 'план, факт, контроль' },
-  { to: paths.references, icon: Layers, title: 'Справочники', note: 'марки, присадка, газы' },
+  { to: paths.materials, icon: Layers, title: 'Справочники', note: 'марки, присадка, газы' },
 ]
 
 export function QuickAccess() {

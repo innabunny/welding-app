@@ -1,9 +1,14 @@
 import type { UseMutationResult } from '@tanstack/react-query'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { errorMessage, fieldErrors } from '@/shared/api/errors'
-import { Button } from '@/shared/ui/Button'
-import { Modal } from '@/shared/ui/Modal'
-import type { SaveVars } from './queries'
+import { Button } from './Button'
+import { Modal } from './Modal'
+
+/** Тело мутации сохранения: id null — создать, число — заменить (PUT) */
+export interface SaveVars<W> {
+  id: number | null
+  body: W
+}
 
 /** null — форма закрыта, id: null — новая запись */
 export type Editing<W> = { id: number | null; initial: W } | null
@@ -16,20 +21,23 @@ export interface FieldsApi<W> {
   errors: Errors
 }
 
-interface Props<W> {
+interface Props<W, R> {
   editing: Editing<W>
   /** «материал», «группу» — для заголовка «Новый …» и «Изменить …» */
   newTitle: string
   editTitle: string
-  save: UseMutationResult<unknown, Error, SaveVars<W>>
+  save: UseMutationResult<R, Error, SaveVars<W>>
   validate: (draft: W) => Errors
   /** Чистка перед отправкой: trim, пустое → null */
   prepare: (draft: W) => W
   onClose: () => void
+  /** После успешного сохранения, до закрытия: например, перейти к созданной записи */
+  onSaved?: (result: R, id: number | null) => void
   children: (api: FieldsApi<W>) => ReactNode
 }
 
-export function ReferenceFormModal<W>({ editing, onClose, newTitle, editTitle, save, ...rest }: Props<W>) {
+/** Модалка «создать / изменить» для простых сущностей: черновик, проверка, ошибки сервера */
+export function FormModal<W, R>({ editing, onClose, onSaved, newTitle, editTitle, save, ...rest }: Props<W, R>) {
   const formId = useId()
   const close = () => {
     save.reset()
@@ -59,7 +67,10 @@ export function ReferenceFormModal<W>({ editing, onClose, newTitle, editTitle, s
           editing={editing}
           formId={formId}
           save={save}
-          onSaved={close}
+          onSaved={(result) => {
+            onSaved?.(result, editing.id)
+            close()
+          }}
           {...rest}
         />
       )}
@@ -67,17 +78,17 @@ export function ReferenceFormModal<W>({ editing, onClose, newTitle, editTitle, s
   )
 }
 
-interface BodyProps<W> {
+interface BodyProps<W, R> {
   editing: NonNullable<Editing<W>>
   formId: string
-  save: UseMutationResult<unknown, Error, SaveVars<W>>
+  save: UseMutationResult<R, Error, SaveVars<W>>
   validate: (draft: W) => Errors
   prepare: (draft: W) => W
-  onSaved: () => void
+  onSaved: (result: R) => void
   children: (api: FieldsApi<W>) => ReactNode
 }
 
-function FormBody<W>({ editing, formId, save, validate, prepare, onSaved, children }: BodyProps<W>) {
+function FormBody<W, R>({ editing, formId, save, validate, prepare, onSaved, children }: BodyProps<W, R>) {
   const [draft, setDraft] = useState<W>(editing.initial)
   const [localErrors, setLocalErrors] = useState<Errors>({})
 

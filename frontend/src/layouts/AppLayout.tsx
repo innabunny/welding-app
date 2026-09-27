@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { useSession } from '@/shared/api/session'
 import { cn } from '@/shared/lib/cn'
+import { Toaster } from '@/shared/ui/Toaster'
 import { paths } from './navigation'
 import { Sidebar } from './Sidebar'
 import { useSidebar } from './sidebarStore'
@@ -30,6 +31,7 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+      <Toaster />
     </div>
   )
 }

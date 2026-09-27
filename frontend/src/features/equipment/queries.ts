@@ -7,7 +7,8 @@ import {
   fetchSpeedUnits,
   updateEquipment,
 } from '@/shared/api/equipment'
-import { fetchWeldingMethods, fetchWorkstations } from '@/shared/api/references'
+import { fetchWeldingMethods } from '@/shared/api/methods'
+import { fetchWorkstations } from '@/shared/api/workshops'
 import type { EquipmentFilters, EquipmentWrite } from '@/shared/types/equipment'
 
 export const equipmentKeys = {
@@ -17,7 +18,7 @@ export const equipmentKeys = {
 }
 
 // справочники меняются редко — держим дольше
-const REFERENCE_STALE = 5 * 60_000
+const LOOKUP_STALE = 5 * 60_000
 
 export const useEquipmentList = (filters: EquipmentFilters) =>
   useQuery({ queryKey: equipmentKeys.list(filters), queryFn: () => fetchEquipmentList(filters) })
@@ -32,19 +33,19 @@ export const useEquipment = (id: number | null) =>
   })
 
 export const useWeldingMethods = () =>
-  useQuery({ queryKey: ['welding-methods'], queryFn: fetchWeldingMethods, staleTime: REFERENCE_STALE })
+  useQuery({ queryKey: ['welding-methods'], queryFn: fetchWeldingMethods, staleTime: LOOKUP_STALE })
 
 export const useWorkstations = () =>
-  useQuery({ queryKey: ['workstations'], queryFn: fetchWorkstations, staleTime: REFERENCE_STALE })
+  useQuery({ queryKey: ['workstations'], queryFn: fetchWorkstations, staleTime: LOOKUP_STALE })
 
 export const useSpeedUnits = () =>
-  useQuery({ queryKey: ['speed-units'], queryFn: fetchSpeedUnits, staleTime: REFERENCE_STALE })
+  useQuery({ queryKey: ['speed-units'], queryFn: fetchSpeedUnits, staleTime: LOOKUP_STALE })
 
 export const useEquipmentParameters = () =>
   useQuery({
     queryKey: ['equipment-parameters'],
     queryFn: fetchEquipmentParameters,
-    staleTime: REFERENCE_STALE,
+    staleTime: LOOKUP_STALE,
   })
 
 export function useSaveEquipment() {

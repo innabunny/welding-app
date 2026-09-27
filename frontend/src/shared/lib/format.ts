@@ -76,3 +76,15 @@ export function initials(name: string): string {
   const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '')
   return letters.join('') || '?'
 }
+
+/** Сегодня — «14:05», раньше — «24.09.2026» */
+export function formatWhen(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return DASH
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return DASH
+  const today =
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return today
+    ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('ru-RU')
+}

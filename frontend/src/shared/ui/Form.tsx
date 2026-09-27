@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useId, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
 
 const control =
@@ -49,21 +49,8 @@ export function Input({ invalid, className, ...rest }: InputProps) {
   )
 }
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  invalid?: boolean
-}
-
-export function Select({ invalid, className, children, ...rest }: SelectProps) {
-  return (
-    <select
-      aria-invalid={invalid || undefined}
-      className={cn(control, 'pr-8', invalid ? 'border-danger' : 'border-border', className)}
-      {...rest}
-    >
-      {children}
-    </select>
-  )
-}
+// свой селект вместо браузерного — импорт из Form остаётся прежним
+export { Select } from './Select'
 
 interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label: ReactNode

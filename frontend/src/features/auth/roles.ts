@@ -8,3 +8,7 @@ export const roleLabels: Record<UserRole, string> = {
   inspector: 'Контролёр',
   '': 'Пользователь',
 }
+
+/** Детали, операции и справочники материалов правят администратор и технолог — как на бэке */
+export const canEditTechnology = (role: UserRole | undefined): boolean =>
+  role === 'admin' || role === 'technologist'

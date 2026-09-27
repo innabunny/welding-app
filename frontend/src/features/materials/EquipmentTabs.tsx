@@ -1,23 +1,14 @@
 import { Check } from 'lucide-react'
 import { useEquipmentParameters, useSpeedUnits, useWeldingMethods } from '@/features/equipment/queries'
+import { processLabels } from '@/shared/config/processes'
 import { formatNumber } from '@/shared/lib/format'
 import type { EquipmentParameterLevel } from '@/shared/types/equipment'
 import { Badge } from '@/shared/ui/Badge'
 import { Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { ReferenceList, Toolbar, type TabProps } from './ReferenceList'
+import { MaterialList, Toolbar, type TabProps } from './MaterialList'
 
 // на бэке эти справочники только для чтения — ведёт администратор в админке
 const readOnlyNote = 'Справочник ведёт администратор в админке.'
-
-const processLabels: Record<string, string> = {
-  tig: 'Неплавящийся электрод в защитном газе',
-  mig: 'Плавящийся электрод в защитном газе',
-  plasma: 'Плазменная',
-  ebw: 'Электронно-лучевая',
-  diff: 'Диффузионная',
-  contact: 'Контактная',
-  laser: 'Лазерная',
-}
 
 const levelLabels: Record<EquipmentParameterLevel, string> = {
   card: 'На всю карту',
@@ -33,7 +24,7 @@ export function WeldingMethodsTab({ search, onSearch }: TabProps) {
   return (
     <>
       <Toolbar search={search} onSearch={onSearch} placeholder="Поиск по названию или обозначению" />
-      <ReferenceList
+      <MaterialList
         query={methods}
         search={search}
         text={(m) => `${m.designation} ${m.name} ${m.id}`}
@@ -68,7 +59,7 @@ export function WeldingMethodsTab({ search, onSearch }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
       <Note />
     </>
   )
@@ -79,7 +70,7 @@ export function SpeedUnitsTab({ search, onSearch }: TabProps) {
   return (
     <>
       <Toolbar search={search} onSearch={onSearch} placeholder="Поиск по обозначению" />
-      <ReferenceList
+      <MaterialList
         query={units}
         search={search}
         text={(u) => `${u.name} ${u.code}`}
@@ -120,7 +111,7 @@ export function SpeedUnitsTab({ search, onSearch }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
       <Note />
     </>
   )
@@ -131,7 +122,7 @@ export function EquipmentParametersTab({ search, onSearch }: TabProps) {
   return (
     <>
       <Toolbar search={search} onSearch={onSearch} placeholder="Поиск по названию" />
-      <ReferenceList
+      <MaterialList
         query={parameters}
         search={search}
         text={(p) => `${p.name} ${p.code}`}
@@ -169,7 +160,7 @@ export function EquipmentParametersTab({ search, onSearch }: TabProps) {
             </tbody>
           </Table>
         )}
-      </ReferenceList>
+      </MaterialList>
       <Note />
     </>
   )

@@ -2,11 +2,17 @@ import { createBrowserRouter } from 'react-router'
 import { AppLayout } from '@/layouts/AppLayout'
 import { paths } from '@/layouts/navigation'
 import type { RouteHandle } from '@/layouts/Topbar'
+import { CardEditPage } from '@/pages/CardEditPage'
+import { CardSheetPage } from '@/pages/CardSheetPage'
+import { CardsPage } from '@/pages/CardsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { EquipmentPage } from '@/pages/EquipmentPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { ReferencesPage } from '@/pages/ReferencesPage'
+import { PartPage } from '@/pages/PartPage'
+import { PartsPage } from '@/pages/PartsPage'
+import { MaterialsPage } from '@/pages/MaterialsPage'
+import { ServicePage } from '@/pages/ServicePage'
 import { StubPage } from '@/pages/StubPage'
 
 const stub = (path: string, crumb: string) => ({
@@ -31,15 +37,47 @@ export const router = createBrowserRouter([
         handle: { crumb: 'Оборудование' } satisfies RouteHandle,
       },
       stub(paths.welds, 'Сварные швы'),
-      stub(paths.cards, 'Технологические карты'),
-      stub(paths.parts, 'Детали и операции'),
       {
-        path: paths.references,
-        element: <ReferencesPage />,
+        path: paths.cards,
+        element: <CardsPage />,
+        handle: { crumb: 'Технологические карты' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.cards}/new`,
+        element: <CardEditPage />,
+        handle: { crumb: 'Новая карта' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.cards}/:id`,
+        element: <CardEditPage />,
+        handle: { crumb: 'Технологическая карта' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.cards}/:id/sheet`,
+        element: <CardSheetPage />,
+        handle: { crumb: 'Бланк техкарты' } satisfies RouteHandle,
+      },
+      {
+        path: paths.parts,
+        element: <PartsPage />,
+        handle: { crumb: 'Детали и операции' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.parts}/:id`,
+        element: <PartPage />,
+        handle: { crumb: 'Деталь' } satisfies RouteHandle,
+      },
+      {
+        path: paths.materials,
+        element: <MaterialsPage />,
         handle: { crumb: 'Справочники' } satisfies RouteHandle,
       },
       stub(paths.attestation, 'Аттестация сварщиков'),
-      stub(paths.service, 'Заявки на обслуживание'),
+      {
+        path: paths.service,
+        element: <ServicePage />,
+        handle: { crumb: 'Заявки на обслуживание' } satisfies RouteHandle,
+      },
       { path: '*', element: <NotFoundPage />, handle: { crumb: 'Не найдено' } satisfies RouteHandle },
     ],
   },

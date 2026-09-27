@@ -119,6 +119,13 @@ export default {
       width: { sidebar: '252px' },
       height: { topbar: '64px' },
       gridTemplateColumns: { app: '252px minmax(0, 1fr)' },
+      keyframes: {
+        'toast-in': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+      },
+      animation: { 'toast-in': 'toast-in .18s ease-out' },
     },
   },
   plugins: [

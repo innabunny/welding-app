@@ -15,7 +15,7 @@ export const paths = {
   welds: '/welds',
   cards: '/cards',
   parts: '/parts',
-  references: '/references',
+  materials: '/materials',
   equipment: '/equipment',
   attestation: '/attestation',
   service: '/service',
@@ -50,7 +50,7 @@ export const navigation: NavGroup[] = [
     items: [
       { to: paths.cards, label: 'Технологические карты', icon: FileText },
       { to: paths.parts, label: 'Детали и операции', icon: AlignLeft },
-      { to: paths.references, label: 'Справочники', icon: Layers },
+      { to: paths.materials, label: 'Справочники', icon: Layers },
     ],
   },
   {

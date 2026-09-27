@@ -1,10 +1,11 @@
+import type { SaveVars } from '@/shared/ui/FormModal'
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import {
   fillerMaterialsApi,
   gasFluxApi,
   materialGroupsApi,
   materialsApi,
-} from '@/shared/api/references'
+} from '@/shared/api/materials'
 import type {
   FillerMaterialWrite,
   GasFluxWrite,
@@ -13,18 +14,13 @@ import type {
 } from '@/shared/types/materials'
 
 // справочники меняются редко — держим дольше
-const REFERENCE_STALE = 5 * 60_000
+const LOOKUP_STALE = 5 * 60_000
 
-export const referenceKeys = {
+export const materialKeys = {
   materials: ['materials'] as const,
   materialGroups: ['material-groups'] as const,
   fillerMaterials: ['filler-materials'] as const,
   gasFlux: ['gas-flux'] as const,
-}
-
-export interface SaveVars<W> {
-  id: number | null
-  body: W
 }
 
 function useSave<W>(save: (id: number | null, body: W) => Promise<unknown>, keys: QueryKey[]) {
@@ -37,35 +33,35 @@ function useSave<W>(save: (id: number | null, body: W) => Promise<unknown>, keys
 }
 
 export const useMaterials = () =>
-  useQuery({ queryKey: referenceKeys.materials, queryFn: materialsApi.list, staleTime: REFERENCE_STALE })
+  useQuery({ queryKey: materialKeys.materials, queryFn: materialsApi.list, staleTime: LOOKUP_STALE })
 
 export const useMaterialGroups = () =>
   useQuery({
-    queryKey: referenceKeys.materialGroups,
+    queryKey: materialKeys.materialGroups,
     queryFn: materialGroupsApi.list,
-    staleTime: REFERENCE_STALE,
+    staleTime: LOOKUP_STALE,
   })
 
 export const useFillerMaterials = () =>
   useQuery({
-    queryKey: referenceKeys.fillerMaterials,
+    queryKey: materialKeys.fillerMaterials,
     queryFn: fillerMaterialsApi.list,
-    staleTime: REFERENCE_STALE,
+    staleTime: LOOKUP_STALE,
   })
 
 export const useGasFlux = () =>
-  useQuery({ queryKey: referenceKeys.gasFlux, queryFn: gasFluxApi.list, staleTime: REFERENCE_STALE })
+  useQuery({ queryKey: materialKeys.gasFlux, queryFn: gasFluxApi.list, staleTime: LOOKUP_STALE })
 
-export const useSaveMaterial = () => useSave<MaterialWrite>(materialsApi.save, [referenceKeys.materials])
+export const useSaveMaterial = () => useSave<MaterialWrite>(materialsApi.save, [materialKeys.materials])
 
 // код группы показывается и в списке материалов — обновляем оба
 export const useSaveMaterialGroup = () =>
   useSave<MaterialGroupWrite>(materialGroupsApi.save, [
-    referenceKeys.materialGroups,
-    referenceKeys.materials,
+    materialKeys.materialGroups,
+    materialKeys.materials,
   ])
 
 export const useSaveFillerMaterial = () =>
-  useSave<FillerMaterialWrite>(fillerMaterialsApi.save, [referenceKeys.fillerMaterials])
+  useSave<FillerMaterialWrite>(fillerMaterialsApi.save, [materialKeys.fillerMaterials])
 
-export const useSaveGasFlux = () => useSave<GasFluxWrite>(gasFluxApi.save, [referenceKeys.gasFlux])
+export const useSaveGasFlux = () => useSave<GasFluxWrite>(gasFluxApi.save, [materialKeys.gasFlux])

@@ -52,7 +52,7 @@ interface Props<T> {
 }
 
 /** Загрузка, ошибка, пусто и поиск — одинаковые для всех вкладок */
-export function ReferenceList<T>({
+export function MaterialList<T>({
   query,
   search,
   text,

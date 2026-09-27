@@ -1,0 +1,161 @@
+/*
+ * Бланк техкарты — стили из CardSheet.vue как есть: размеры сняты
+ * с эталонного бланка. У Vue они были scoped, здесь все селекторы
+ * под .card-sheet, чтобы .row, .body, .lab не задели приложение.
+ * Этот же CSS уходит в окно печати.
+ */
+
+.card-sheet {
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  border: 1.6px solid #000;
+}
+.card-sheet .lab {
+  color: #333;
+  font-size: 10px;
+}
+.card-sheet .val {
+  padding: 2px 4px;
+  min-height: 18px;
+}
+
+.card-sheet .toprow {
+  display: grid;
+  grid-template-columns: 18% 51% 18% 13%;
+  border-bottom: 1px solid #000;
+}
+.card-sheet .toprow > .tc {
+  border-right: 1px solid #000;
+  padding: 2px 6px;
+  text-align: center;
+  font-size: 11px;
+}
+.card-sheet .toprow > .tc:last-child {
+  border-right: none;
+}
+.card-sheet .tc-title {
+  font-weight: 700;
+}
+
+.card-sheet .body {
+  display: grid;
+  grid-template-columns: 22% 63% 15%;
+}
+.card-sheet .body > .col {
+  border-right: 1px solid #000;
+}
+.card-sheet .body > .col:last-child {
+  border-right: none;
+}
+
+.card-sheet .col-left .row {
+  border-bottom: 1px solid #000;
+}
+.card-sheet .col-left .row:last-child {
+  border-bottom: none;
+}
+.card-sheet .col-left .equip {
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 4px;
+}
+.card-sheet .fld2 {
+  display: grid;
+  grid-template-columns: 58% 42%;
+}
+.card-sheet .fld2 .lab {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid #000;
+  padding: 2px 4px;
+}
+
+.card-sheet .col-esk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  min-height: 250px;
+}
+.card-sheet .esk-svg {
+  width: 100%;
+  max-width: 600px;
+}
+.card-sheet .esk-svg img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.card-sheet .esk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-sheet .col-right {
+  display: flex;
+  flex-direction: column;
+}
+.card-sheet .rj {
+  display: grid;
+  grid-template-columns: 45% 55%;
+  border-bottom: 1px solid #000;
+}
+.card-sheet .rj .lab {
+  border-right: 1px solid #000;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+}
+.card-sheet .col-right .tail {
+  flex: 1;
+}
+
+.card-sheet .passes {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border-top: 1px solid #000;
+  font-size: 11px;
+}
+.card-sheet .passes th,
+.card-sheet .passes td {
+  border: 1px solid #000;
+  padding: 2px 3px;
+  text-align: center;
+}
+.card-sheet .passes th {
+  font-weight: 700;
+  vertical-align: middle;
+  line-height: 1.15;
+  font-size: 9.5px;
+}
+.card-sheet .passes .cn {
+  width: 46px;
+  border-left: none;
+}
+/* у Vue справа была колонка удаления — без неё край таблицы на рамке бланка */
+.card-sheet .passes th:last-child,
+.card-sheet .passes td:last-child {
+  border-right: none;
+}
+
+.card-sheet .foot {
+  display: flex;
+  gap: 24px;
+  border-top: 1px solid #000;
+  padding: 4px 8px;
+}
+.card-sheet .foot__cell {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+/* не внутри @media print: окно печати такие блоки вырезает */
+@page {
+  size: A4 landscape;
+  margin: 8mm;
+}
