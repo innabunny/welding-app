@@ -1,9 +1,11 @@
 from datetime import date, timedelta
 
 from django.db.models import Q
-from rest_framework import viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from apps.accounts.permissions import IsAttestationEditor
 
 from .models import Attestation, AttestationRule
 from .serializers import (
@@ -48,6 +50,7 @@ class AttestationRuleViewSet(viewsets.ReadOnlyModelViewSet):
 class AttestationViewSet(viewsets.ModelViewSet):
     """Аттестации сварщиков."""
 
+    permission_classes = [permissions.IsAuthenticated, IsAttestationEditor]
     queryset = Attestation.objects.select_related(
         "welder", "welder__workshop", "method", "group"
     ).prefetch_related("items", "items__material1", "items__material2")

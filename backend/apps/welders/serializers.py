@@ -63,7 +63,7 @@ class WelderListSerializer(serializers.ModelSerializer):
     )
     experience_years = serializers.ReadOnlyField()
 
-    is_attested = serializers.BooleanField(read_only=True)
+    is_attested = serializers.BooleanField(source="has_valid_attestation", read_only=True)
     attestations_count = serializers.IntegerField(read_only=True)
     # худшее состояние срока по всем допускам: expired / soon / valid
     expiry_state = serializers.SerializerMethodField()

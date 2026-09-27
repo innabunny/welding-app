@@ -1,7 +1,9 @@
 from django.db.models import Count, Prefetch, Q
-from rest_framework import viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from apps.accounts.permissions import IsTechnologyEditor
 
 from .models import (
     ArcRun,
@@ -57,6 +59,8 @@ class PartInstanceViewSet(viewsets.ModelViewSet):
 class WeldViewSet(viewsets.ModelViewSet):
     """Сваренные швы. Паспорт шва — действие passport."""
 
+    # статус шва и заключения ведут администратор и технолог
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
     queryset = Weld.objects.select_related(
         "instance", "instance__part", "seam", "seam__material_1", "seam__material_2"
     )
@@ -201,6 +205,8 @@ class OperationRunViewSet(viewsets.ModelViewSet):
 class InspectionViewSet(viewsets.ModelViewSet):
     """Заключения контроля."""
 
+    # статус шва и заключения ведут администратор и технолог
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
     queryset = Inspection.objects.select_related(
         "run", "run__weld", "run__weld__instance", "run__operation"
     )

@@ -1,9 +1,11 @@
 from datetime import date
 
 from django.db.models import Case, Count, Exists, OuterRef, Q, When
-from rest_framework import viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from apps.accounts.permissions import IsAttestationEditor
 
 from apps.attestation.models import Attestation
 
@@ -14,6 +16,7 @@ from .serializers import WelderListSerializer, WelderSerializer
 class WelderViewSet(viewsets.ModelViewSet):
     """Сварщики."""
 
+    permission_classes = [permissions.IsAuthenticated, IsAttestationEditor]
     queryset = Welder.objects.select_related("workshop")
     serializer_class = WelderSerializer
 
@@ -34,8 +37,10 @@ class WelderViewSet(viewsets.ModelViewSet):
                 status="done",
                 valid_until__gte=date.today(),
             )
+            # имя не is_attested: так называется свойство модели,
+            # и Django падает, пытаясь записать в него аннотацию
             qs = qs.annotate(
-                is_attested=Exists(has_valid),
+                has_valid_attestation=Exists(has_valid),
                 attestations_count=Count("attestations", distinct=True),
             ).prefetch_related("attestations")
 

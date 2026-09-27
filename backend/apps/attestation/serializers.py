@@ -71,6 +71,9 @@ class AttestationItemSerializer(serializers.ModelSerializer):
 
     
 
+    # записываемый id: по нему образец обновляется на месте, а не пересоздаётся
+    id = serializers.IntegerField(required=False)
+
     class Meta:
         model = AttestationItem
         fields = [
@@ -159,8 +162,18 @@ class AttestationSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop("items", [])
         attestation = Attestation.objects.create(**validated_data)
         for item in items_data:
+            item.pop("id", None)
             AttestationItem(attestation=attestation, **item).save()
         return attestation
+
+    def validate(self, attrs):
+        status = attrs.get("status", getattr(self.instance, "status", "draft"))
+        attested_at = attrs.get("attested_at", getattr(self.instance, "attested_at", None))
+        if status == "done" and not attested_at:
+            raise serializers.ValidationError(
+                {"attested_at": "Для статуса «Аттестован» нужна дата аттестации"}
+            )
+        return attrs
 
     def update(self, instance, validated_data):
         # в черновике правится всё; после отправки на испытания —
@@ -177,6 +190,75 @@ class AttestationSerializer(serializers.ModelSerializer):
                     f"После отправки на испытания нельзя менять: "
                     f"{', '.join(sorted(forbidden))}"
                 )
+
+        items_data = validated_data.pop("items", None)
+        leaving_draft = instance.status == "draft" and validated_data.get("status", "draft") != "draft"
+
+        # срок считает save() модели, только если он пуст
+        if "attested_at" in validated_data:
+            instance.valid_until = None
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if items_data is not None:
+            self._save_items(instance, items_data, draft=instance.status == "draft" or leaving_draft)
+        if leaving_draft:
+            self._snapshot_requirements(instance)
+        return instance
+
+    # после испытаний меняются только результаты образцов
+    RESULT_FIELDS = {
+        "vik_result", "physical_protocol", "metallography_protocol",
+        "tensile_strength", "bend_angle", "impact_strength", "other_methods",
+    }
+
+    def _save_items(self, instance, items_data, draft):
+        existing = {item.id: item for item in instance.items.all()}
+        keep = set()
+        for data in items_data:
+            item = existing.get(data.pop("id", None))
+            if not draft:
+                if item is None:
+                    raise serializers.ValidationError(
+                        "После отправки на испытания образцы не добавляются"
+                    )
+                data = {k: v for k, v in data.items() if k in self.RESULT_FIELDS}
+            if item is None:
+                item = AttestationItem(attestation=instance)
+            # сменили материал в черновике — снимок подписи снимаем заново
+            for fk, snap in (("wire", "wire_text"), ("flux", "flux_text"), ("gas", "gas_text")):
+                if fk in data and getattr(item, f"{fk}_id") != getattr(data[fk], "id", None):
+                    setattr(item, snap, "")
+            for attr, value in data.items():
+                setattr(item, attr, value)
+            item.save()
+            keep.add(item.id)
+        if draft:
+            instance.items.exclude(id__in=keep).delete()
+
+    @staticmethod
+    def _snapshot_requirements(instance):
+        """Требования фиксируются при отправке на испытания:
+        правило в библиотеке могут поменять, а протокол — нет."""
+        rules = AttestationRule.objects.filter(
+            method=instance.method, group=instance.group, is_active=True,
+        )
+        for item in instance.items.all():
+            if item.requirements_snapshot:
+                continue
+            thickness = item.thickness_max or item.thickness_min
+            if thickness is None:
+                continue
+            rule = next(
+                (r for r in rules
+                 if r.th_from <= thickness and (r.th_to is None or thickness <= r.th_to)),
+                None,
+            )
+            if rule:
+                item.requirements_snapshot = rule.required_output
+                item.save(update_fields=["requirements_snapshot"])
+
 
 class AttestationListSerializer(serializers.ModelSerializer):
     """Короткий вид для реестра."""

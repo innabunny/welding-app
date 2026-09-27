@@ -123,10 +123,11 @@ class WeldPassRunSerializer(serializers.ModelSerializer):
         if not arcs:
             return None
         values = [float(a.current_avg) for a in arcs]
+        # min/max у сегмента могут не прийти — без default() упадёт на пустом
         return {
             "avg": round(sum(values) / len(values), 1),
-            "min": min(float(a.current_min) for a in arcs if a.current_min is not None),
-            "max": max(float(a.current_max) for a in arcs if a.current_max is not None),
+            "min": min((float(a.current_min) for a in arcs if a.current_min is not None), default=None),
+            "max": max((float(a.current_max) for a in arcs if a.current_max is not None), default=None),
         }
 
     def get_deviation(self, obj) -> dict | None:
@@ -242,7 +243,7 @@ class WeldSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "instance_id", "seam_id",
-            "part_number", "serial_no", "seam_number", "thickness_1", "thickness_1",
+            "part_number", "serial_no", "seam_number", "seam_thickness_1", "seam_thickness_2",
             "status", "runs_count", "created_at",
         ]
 
