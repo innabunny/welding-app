@@ -22,6 +22,13 @@ APP_NAME = "WeldingPortal"
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8765
 
+# без реальной консоли (вывод перенаправлен в файл — так делает и проверка
+# в CI) Windows подставляет кодировку локали (у английской — cp1252, там нет
+# кириллицы) вместо utf-8, и печать русского текста падает с UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace", line_buffering=True)
+
 
 def data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
@@ -75,9 +82,6 @@ def prepare_database() -> None:
 
 
 def main() -> None:
-    # построчный вывод: иначе при выводе в файл (проверка в CI) текст застревает в буфере
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(line_buffering=True)
     # в exe рядом с кодом лежат данные сборки; в обычном запуске — папка backend
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     sys.path.insert(0, str(base))
