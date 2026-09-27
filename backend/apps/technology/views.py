@@ -1,7 +1,9 @@
-from django.db.models import Count, Q
-from rest_framework import viewsets
+from django.db.models import Count, Prefetch, Q
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from apps.accounts.permissions import IsTechnologyEditor
 
 from .models import Operation, Part, SeamSpec
 from .serializers import (
@@ -17,7 +19,16 @@ class PartViewSet(viewsets.ModelViewSet):
 
     # prefetch_related подтягивает швы и операции одним запросом на всех,
     # а не отдельным на каждую деталь
-    queryset = Part.objects.prefetch_related("seams", "operations")
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
+    queryset = Part.objects.prefetch_related(
+        # швы с материалами и операции с картой — иначе по запросу на строку
+        Prefetch("seams", queryset=SeamSpec.objects.select_related(
+            "part", "material_1", "material_2",
+        ).prefetch_related("operations")),
+        Prefetch("operations", queryset=Operation.objects.select_related(
+            "part", "seam", "card",
+        )),
+    )
     serializer_class = PartSerializer
 
     def get_serializer_class(self):
@@ -58,8 +69,7 @@ class PartViewSet(viewsets.ModelViewSet):
         """
         part = self.get_object()
         operations = (
-            part.operations.select_related("seam")
-            .prefetch_related("card")
+            part.operations.select_related("part", "seam", "card")
             .order_by("order", "number")
         )
         return Response(
@@ -73,6 +83,7 @@ class PartViewSet(viewsets.ModelViewSet):
 class SeamSpecViewSet(viewsets.ModelViewSet):
     """Швы по чертежу."""
 
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
     queryset = SeamSpec.objects.select_related(
         "part", "material_1", "material_2"
     ).prefetch_related("operations")
@@ -109,7 +120,8 @@ class SeamSpecViewSet(viewsets.ModelViewSet):
 class OperationViewSet(viewsets.ModelViewSet):
     """Операции техпроцесса."""
 
-    queryset = Operation.objects.select_related("part", "seam")
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
+    queryset = Operation.objects.select_related("part", "seam", "card")
     serializer_class = OperationSerializer
 
     def get_queryset(self):

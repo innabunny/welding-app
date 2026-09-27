@@ -3,6 +3,7 @@
 # для отображения, но приходят с сервера, а не с фронта.
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from .models import Operation, Part, SeamSpec
 from apps.materials.models import Material
@@ -44,9 +45,15 @@ class SeamSpecSerializer(serializers.ModelSerializer):
             "material_1_id", "material_1_marka",
             "material_2_id", "material_2_marka",
             "thickness_1", "thickness_2",
+            "pos_1", "pos_2", "mass_1", "mass_2",
             "seam_type", "seam_diameter", "seam_length",
             "operations_count",
         ]
+        # свой валидатор вместо автоматического — ради русского сообщения
+        validators = [UniqueTogetherValidator(
+            queryset=SeamSpec.objects.all(), fields=["part_id", "number"],
+            message="У этой детали уже есть шов с таким номером",
+        )]
 
     def validate(self, attrs):
         """Кольцевой шов без диаметра — сломанный пересчёт скорости
@@ -83,6 +90,10 @@ class OperationSerializer(serializers.ModelSerializer):
     # есть ли уже техкарта на эту операцию — видно в списке,
     # чтобы технолог понимал, где дыра
     has_card = serializers.SerializerMethodField()
+    # карта операции — чтобы из маршрута детали сразу перейти к ней
+    card_id = serializers.SerializerMethodField()
+    card_no = serializers.SerializerMethodField()
+    card_is_released = serializers.SerializerMethodField()
 
     class Meta:
         model = Operation
@@ -92,13 +103,26 @@ class OperationSerializer(serializers.ModelSerializer):
             "seam_id", "seam_number", "seam_thickness_1", "seam_thickness_2",
             "number", "name", "order",
             "required_controls",
-            "has_card",
+            "has_card", "card_id", "card_no", "card_is_released",
         ]
+        validators = [UniqueTogetherValidator(
+            queryset=Operation.objects.all(), fields=["part_id", "number"],
+            message="У этой детали уже есть операция с таким номером",
+        )]
 
     def get_has_card(self, obj) -> bool:
         # related_name="card" у OneToOneField в WeldingCard;
         # hasattr — потому что при отсутствии связи Django бросает исключение
         return hasattr(obj, "card")
+
+    def get_card_id(self, obj) -> int | None:
+        return obj.card.id if hasattr(obj, "card") else None
+
+    def get_card_no(self, obj) -> str:
+        return obj.card.card_no if hasattr(obj, "card") else ""
+
+    def get_card_is_released(self, obj) -> bool:
+        return hasattr(obj, "card") and obj.card.is_released
 
     def validate(self, attrs):
         """Шов должен принадлежать той же детали, что и операция.

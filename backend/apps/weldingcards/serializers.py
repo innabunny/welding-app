@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from apps.equipment.models import Equipment, SpeedUnit
 from apps.materials.models import FillerMaterial, GasFlux
@@ -80,8 +81,14 @@ class WeldingCardSerializer(serializers.ModelSerializer):
 
     passes = WeldPassSerializer(many=True, required=False)
 
+    # поле объявлено вручную, поэтому проверку OneToOne DRF сам не добавит:
+    # без неё вторая карта на операцию падает в базе с 500
     operation_id = serializers.PrimaryKeyRelatedField(
         source="operation", queryset=Operation.objects.all(),
+        validators=[UniqueValidator(
+            queryset=WeldingCard.objects.all(),
+            message="На эту операцию карта уже есть",
+        )],
     )
     # всё, что ниже, приходит по цепочке и на фронт уходит только для показа
     operation_number = serializers.CharField(

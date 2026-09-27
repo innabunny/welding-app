@@ -151,7 +151,7 @@ python manage.py runserver
 python3 manage.py dumpdata \
   accounts.Workshop accounts.User \
   equipment.WeldingMethod equipment.Equipment \
-  references.GasFlux references.FillerMaterial references.MaterialGroup references.Material \
+  materials.GasFlux materials.FillerMaterial materials.MaterialGroup materials.Material \
   welders.Welder \
   attestation.AttestationRule attestation.Attestation attestation.AttestationItem \
   --indent 2 --natural-foreign -o fixtures/seed.json
