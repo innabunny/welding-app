@@ -111,7 +111,13 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as error:  # noqa: BLE001 — окно не должно закрыться молча
-        print(f"\nОшибка запуска: {error}")
-        input("Нажмите Enter, чтобы закрыть окно…")
+    except Exception:  # noqa: BLE001 — окно не должно закрыться молча
+        import traceback
+
+        print("\nОшибка запуска:")
+        traceback.print_exc()
+        # input() блокировал бы навсегда там, где нет интерактивного stdin
+        # (проверка в CI): тогда окно не закрывается, а зависает
+        if sys.stdin.isatty():
+            input("\nНажмите Enter, чтобы закрыть окно…")
         raise

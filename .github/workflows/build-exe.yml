@@ -62,18 +62,25 @@ jobs:
         shell: pwsh
         run: |
           $env:LOCALAPPDATA = "$env:RUNNER_TEMP\portal-check"
-          $proc = Start-Process backend/dist/WeldingPortal/WeldingPortal.exe -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\out.txt"
+          $proc = Start-Process backend/dist/WeldingPortal/WeldingPortal.exe -PassThru `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\out.txt" `
+            -RedirectStandardError "$env:RUNNER_TEMP\err.txt"
           $ok = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 2
+            if ($proc.HasExited) { break }
             try {
               $page = Invoke-WebRequest http://127.0.0.1:8765/ -UseBasicParsing
               $login = Invoke-RestMethod http://127.0.0.1:8765/api/auth/login/ -Method Post -ContentType 'application/json' -Body '{"login":"admin","password":"admin"}'
               if ($page.StatusCode -eq 200 -and $login.token) { $ok = $true; break }
             } catch {}
           }
-          Get-Content "$env:RUNNER_TEMP\out.txt"
-          Stop-Process $proc -Force
+          Write-Host "--- exited: $($proc.HasExited)  exit code: $($proc.ExitCode) ---"
+          Write-Host "--- stdout ---"
+          Get-Content "$env:RUNNER_TEMP\out.txt" -ErrorAction SilentlyContinue
+          Write-Host "--- stderr ---"
+          Get-Content "$env:RUNNER_TEMP\err.txt" -ErrorAction SilentlyContinue
+          if (-not $proc.HasExited) { Stop-Process $proc -Force }
           if (-not $ok) { throw "Портал не поднялся" }
 
       - uses: actions/upload-artifact@v4
