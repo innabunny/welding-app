@@ -15,8 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path
+from django.http import FileResponse, Http404
+from django.urls import include, path, re_path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -32,3 +34,17 @@ urlpatterns = [
     path("api/", include("apps.workshops.urls")),
     path("api/", include("apps.service.urls")),
 ]
+
+
+def spa_index(request):
+    """Любой адрес вне API и админки — страница фронта: маршруты
+    вроде /cards/5 разбирает уже React. Только если фронт собран."""
+    index = settings.SPA_DIR / "index.html"
+    if not index.exists():
+        raise Http404("Фронт не собран")
+    return FileResponse(index.open("rb"), content_type="text/html; charset=utf-8")
+
+
+if (settings.SPA_DIR / "index.html").exists():
+    urlpatterns.append(re_path(r"^(?!api/|admin/|static/).*$", spa_index))
+

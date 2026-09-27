@@ -51,3 +51,8 @@ export async function fetchSeam(id: number): Promise<SeamSpec> {
   const { data } = await api.get<SeamSpec>(`/seams/${id}/`)
   return data
 }
+
+// удаление: если на запись ссылаются техкарты или изделия, сервер вернёт 400 с объяснением
+export const deletePart = async (id: number) => void (await api.delete(`/parts/${id}/`))
+export const deleteSeam = async (id: number) => void (await api.delete(`/seams/${id}/`))
+export const deleteOperation = async (id: number) => void (await api.delete(`/operations/${id}/`))

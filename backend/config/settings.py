@@ -196,6 +196,25 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+# сюда collectstatic собирает статику админки и DRF — для запуска без DEBUG
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Собранный фронт (npm run build → сюда). Если он есть, Django сам отдаёт
+# портал: так работает exe для демо, без отдельного сервера фронта.
+# В разработке папки нет — фронт отдаёт Vite, а эти настройки молчат.
+SPA_DIR = BASE_DIR / "static" / "spa"
+
+# WhiteNoise раздаёт статику без DEBUG. Необязателен: в контейнере
+# разработки его нет, и без него всё работает как раньше
+try:
+    import whitenoise  # noqa: F401
+except ImportError:
+    pass
+else:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+    if SPA_DIR.exists():
+        # файлы сборки фронта — от корня: /assets/…, /favicon.svg
+        WHITENOISE_ROOT = SPA_DIR
 
 
 # Email

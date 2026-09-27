@@ -1,14 +1,16 @@
-import { ArrowLeft, FilePlus2, FileText, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, FilePlus2, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { canEditTechnology } from '@/features/auth/roles'
 import { emptySeam } from '@/features/parts/defaults'
 import { OperationFormModal } from '@/features/parts/OperationFormModal'
 import { PartFormModal } from '@/features/parts/PartFormModal'
-import { usePart } from '@/features/parts/queries'
+import { useDeleteOperation, useDeletePart, useDeleteSeam, usePart } from '@/features/parts/queries'
 import { SeamFormModal } from '@/features/parts/SeamFormModal'
+import { errorMessage } from '@/shared/api/errors'
 import { useSession } from '@/shared/api/session'
 import { formatNumber } from '@/shared/lib/format'
+import { toast } from '@/shared/lib/toast'
 import type { Operation, OperationWrite, PartDetail, PartWrite, SeamSpec, SeamWrite } from '@/shared/types/technology'
 import { Badge } from '@/shared/ui/Badge'
 import { Button, IconButton } from '@/shared/ui/Button'
@@ -27,6 +29,9 @@ function materials(s: SeamSpec): string {
   if (s.material2Marka && s.material2Marka !== s.material1Marka) return `${s.material1Marka || '—'} + ${s.material2Marka}`
   return s.material1Marka || '—'
 }
+
+/** Опасное действие — серое, красное только под курсором */
+const DANGER_ICON = 'text-muted hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-40'
 
 const toPartWrite = (p: PartDetail): PartWrite => ({
   number: p.number,
@@ -70,6 +75,27 @@ export function PartPage() {
   const [editingPart, setEditingPart] = useState<Editing<PartWrite>>(null)
   const [editingSeam, setEditingSeam] = useState<Editing<SeamWrite>>(null)
   const [editingOperation, setEditingOperation] = useState<Editing<OperationWrite>>(null)
+  const removePart = useDeletePart()
+  const removeSeam = useDeleteSeam()
+  const removeOperation = useDeleteOperation()
+
+  /** Подтверждение, удаление; причину отказа сервер объясняет сам */
+  const confirmDelete = (
+    question: string,
+    mutation: typeof removePart,
+    targetId: number,
+    done: string,
+    after?: () => void,
+  ) => {
+    if (!window.confirm(question)) return
+    mutation.mutate(targetId, {
+      onSuccess: () => {
+        toast(done)
+        after?.()
+      },
+      onError: (error) => toast(errorMessage(error), 'error'),
+    })
+  }
 
   if (!Number.isInteger(id)) return <EmptyState title="Деталь не найдена" />
   if (part.isPending) return <SkeletonRows rows={8} />
@@ -111,9 +137,28 @@ export function PartPage() {
           {p.note && <p className="whitespace-pre-line text-nav text-muted">{p.note}</p>}
         </div>
         {canEdit && (
-          <Button variant="secondary" icon={<Pencil />} onClick={() => setEditingPart({ id: p.id, initial: toPartWrite(p) })}>
-            Изменить деталь
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              icon={<Trash2 />}
+              disabled={removePart.isPending}
+              className="hover:bg-danger-soft hover:text-danger"
+              onClick={() =>
+                confirmDelete(
+                  `Удалить деталь ${p.number} вместе со швами и операциями?`,
+                  removePart,
+                  p.id,
+                  `Деталь ${p.number} удалена`,
+                  () => navigate('/parts'),
+                )
+              }
+            >
+              Удалить
+            </Button>
+            <Button variant="secondary" icon={<Pencil />} onClick={() => setEditingPart({ id: p.id, initial: toPartWrite(p) })}>
+              Изменить деталь
+            </Button>
+          </div>
         )}
       </div>
 
@@ -155,7 +200,7 @@ export function PartPage() {
                   <Th>Контроль после</Th>
                   <Th>Техкарта</Th>
                   {canEdit && (
-                    <Th className="w-12">
+                    <Th className="w-24">
                       <span className="sr-only">Действия</span>
                     </Th>
                   )}
@@ -205,12 +250,24 @@ export function PartPage() {
                     </Td>
                     {canEdit && (
                       <Td>
-                        <IconButton
-                          label={`Изменить операцию ${o.number}`}
-                          onClick={() => setEditingOperation({ id: o.id, initial: toOperationWrite(o) })}
-                        >
-                          <Pencil />
-                        </IconButton>
+                        <span className="flex gap-1.5">
+                          <IconButton
+                            label={`Изменить операцию ${o.number}`}
+                            onClick={() => setEditingOperation({ id: o.id, initial: toOperationWrite(o) })}
+                          >
+                            <Pencil />
+                          </IconButton>
+                          <IconButton
+                            label={`Удалить операцию ${o.number}`}
+                            className={DANGER_ICON}
+                            disabled={removeOperation.isPending}
+                            onClick={() =>
+                              confirmDelete(`Удалить операцию ${o.number}?`, removeOperation, o.id, `Операция ${o.number} удалена`)
+                            }
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </span>
                       </Td>
                     )}
                   </Tr>
@@ -250,7 +307,7 @@ export function PartPage() {
                   <Th className="text-right">Длина, мм</Th>
                   <Th className="text-right">Операций</Th>
                   {canEdit && (
-                    <Th className="w-12">
+                    <Th className="w-24">
                       <span className="sr-only">Действия</span>
                     </Th>
                   )}
@@ -279,9 +336,19 @@ export function PartPage() {
                     <Td className="text-right font-mono">{s.operationsCount}</Td>
                     {canEdit && (
                       <Td>
-                        <IconButton label={`Изменить шов ${s.number}`} onClick={() => setEditingSeam({ id: s.id, initial: toSeamWrite(s) })}>
-                          <Pencil />
-                        </IconButton>
+                        <span className="flex gap-1.5">
+                          <IconButton label={`Изменить шов ${s.number}`} onClick={() => setEditingSeam({ id: s.id, initial: toSeamWrite(s) })}>
+                            <Pencil />
+                          </IconButton>
+                          <IconButton
+                            label={`Удалить шов ${s.number}`}
+                            className={DANGER_ICON}
+                            disabled={removeSeam.isPending}
+                            onClick={() => confirmDelete(`Удалить шов ${s.number}?`, removeSeam, s.id, `Шов ${s.number} удалён`)}
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </span>
                       </Td>
                     )}
                   </Tr>

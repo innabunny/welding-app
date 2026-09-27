@@ -1,4 +1,5 @@
-from django.db.models import Count, Prefetch, Q
+from django.db import transaction
+from django.db.models import Count, Prefetch, ProtectedError, Q
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -14,8 +15,27 @@ from .serializers import (
 )
 
 
-class PartViewSet(viewsets.ModelViewSet):
+class ProtectedDestroyMixin:
+    """Удаление, которому мешают связи (PROTECT), — понятная ошибка 400,
+    а не 500. Перечисляем, что именно держит запись: техкарты, изделия."""
+
+    protected_hint = "Сначала удалите их."
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError as error:
+            kinds = sorted({str(obj._meta.verbose_name_plural).lower() for obj in error.protected_objects})
+            return Response(
+                {"detail": f"Удалить нельзя: на запись ссылаются {', '.join(kinds)}. {self.protected_hint}"},
+                status=400,
+            )
+
+
+class PartViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
     """Детали по чертежу."""
+
+    protected_hint = "Если по детали уже варили, её не удаляют, а снимают с производства."
 
     # prefetch_related подтягивает швы и операции одним запросом на всех,
     # а не отдельным на каждую деталь
@@ -56,6 +76,16 @@ class PartViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    def perform_destroy(self, instance):
+        """Операция держит свой шов через PROTECT, а Django проверяет это
+        раньше, чем видит, что операция удаляется вместе с деталью, — и
+        отказывает. Поэтому по порядку: операции, швы, деталь. Мешают
+        техкарта или изделие — откатывается всё целиком."""
+        with transaction.atomic():
+            instance.operations.all().delete()
+            instance.seams.all().delete()
+            instance.delete()
+
     @action(detail=True, methods=["get"])
     def route(self, request, pk=None):
         """Маршрут детали: операции по порядку, с швом и картой.
@@ -76,8 +106,10 @@ class PartViewSet(viewsets.ModelViewSet):
         )
 
 
-class SeamSpecViewSet(viewsets.ModelViewSet):
+class SeamSpecViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
     """Швы по чертежу."""
+
+    protected_hint = "Сначала удалите операции, которые варят этот шов."
 
     permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
     queryset = SeamSpec.objects.select_related(
@@ -113,8 +145,10 @@ class SeamSpecViewSet(viewsets.ModelViewSet):
         return qs.distinct()
 
 
-class OperationViewSet(viewsets.ModelViewSet):
+class OperationViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
     """Операции техпроцесса."""
+
+    protected_hint = "Сначала удалите техкарту операции."
 
     permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
     queryset = Operation.objects.select_related("part", "seam", "card")

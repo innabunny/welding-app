@@ -9,6 +9,9 @@
     python manage.py seed_demo            # в пустую базу
     python manage.py seed_demo --reset    # стереть демо и завести заново
 
+Учётки: admin / admin и demid / demid — администраторы,
+остальные (technolog, master, mechanic, control…) — пароль demo.
+
 Случайность фиксирована (--seed), так что при одинаковом запуске
 данные получаются одинаковыми.
 """
@@ -43,8 +46,12 @@ from apps.workshops.models import Workshop
 
 DEMO_PASSWORD = "demo"
 
+# у администраторов — свои пароли, у остальных демо-учёток — DEMO_PASSWORD
+PASSWORDS = {"admin": "admin", "demid": "demid"}
+
 USERS = [
     ("admin", "Администратор Портала", "admin", None),
+    ("demid", "Михайлов Д.С.", "admin", None),
     ("technolog", "Соколова Елена Викторовна", "technologist", 1),
     ("master", "Кузнецов Андрей Петрович", "master", 1),
     ("master7", "Лебедев Олег Иванович", "master", 2),
@@ -201,7 +208,7 @@ class Command(BaseCommand):
 
     def _summary(self):
         rows = [
-            ("пользователей (пароль «demo»)", User.objects.filter(username__in=[u[0] for u in USERS]).count()),
+            ("пользователей (admin/admin, demid/demid, остальные — demo)", User.objects.filter(username__in=[u[0] for u in USERS]).count()),
             ("сварщиков", Welder.objects.count()),
             ("аттестаций", Attestation.objects.count()),
             ("деталей", Part.objects.count()),
@@ -227,7 +234,7 @@ class Command(BaseCommand):
             user.name, user.role, user.workshop_id, user.is_active = name, role, workshop, True
             # админке нужен флаг сотрудника — пусть демо-админ заходит и туда
             user.is_staff = user.is_superuser = role == "admin"
-            user.set_password(DEMO_PASSWORD)
+            user.set_password(PASSWORDS.get(login, DEMO_PASSWORD))
             user.save()
             self.users[login] = user
 

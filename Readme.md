@@ -50,6 +50,28 @@ python manage.py migrate && python manage.py runserver
 
 ---
 
+## Демо-сборка для Windows (exe)
+
+Портал целиком в одной папке: бэк, собранный фронт и SQLite. Ставить ничего не нужно.
+
+**Собрать.** Собирает GitHub Actions при каждом пуше в `main` или вручную:
+вкладка Actions → «Сборка exe» → Run workflow. Готовая папка — в артефакте
+`WeldingPortal-windows` на странице запуска (хранится 30 дней).
+
+**Запустить.** Распаковать архив, открыть `WeldingPortal.exe`. Откроется окно
+с адресом и браузер. Окно не закрывать, пока работаете с порталом.
+
+- при первом запуске база наполняется справочниками и демо-производством;
+- вход: `admin` / `admin`, `demid` / `demid`; остальные демо-учётки
+  (`technolog`, `master`, `mechanic`, `control`) — пароль `demo`;
+- база и ключ лежат в `%LOCALAPPDATA%\WeldingPortal` — удалите папку,
+  чтобы начать с чистого демо.
+
+Файлы сборки: `backend/desktop.py` (запуск), `backend/desktop.spec` (PyInstaller),
+`backend/requirements-desktop.txt`, `.github/workflows/build-exe.yml`.
+
+---
+
 ## Запуск с нуля на новой машине
 
 Нужен установленный Python 3 (проверить: `python --version` на Windows / `python3 --version` на Ubuntu).

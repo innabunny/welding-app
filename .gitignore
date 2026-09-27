@@ -12,6 +12,11 @@ frontend/dist/
 # сборка фронта, которую раздаёт Django
 backend/static/spa/
 
+# сборка exe: статика админки и артефакты PyInstaller
+backend/staticfiles/
+backend/build/
+backend/dist/
+
 # среда
 .env
 .DS_Store

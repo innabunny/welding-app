@@ -1,0 +1,5 @@
+# Для сборки exe (демо на Windows) — поверх requirements.txt
+waitress==3.0.2
+whitenoise==6.9.0
+tzdata
+pyinstaller==6.16.0
