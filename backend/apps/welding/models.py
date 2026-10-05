@@ -255,6 +255,12 @@ class WeldingSession(models.Model):
         "Режим записи", max_length=20, choices=Mode.choices, default=Mode.ROUTINE,
     )
 
+    external_id = models.CharField(
+        "Идентификатор сеанса от узла", max_length=100, unique=True, null=True, blank=True,
+        help_text="Генерирует узел: <node>-<время старта>. "
+                  "Нужен, чтобы узел мог работать без связи с порталом",
+    )
+
     # заполняется только в режиме «по техпроцессу».
     # SET_NULL: если QR прочитан, а расшифровки ещё нет, данные
     # не теряются — портал привяжет их позже
@@ -481,3 +487,192 @@ class RouteCode(models.Model):
 
     def __str__(self):
         return f"{self.code} → {self.operation}"
+
+
+# телеметрия и контроль режима
+#
+# Узел меряет ТОЛЬКО ток и напряжение. Всё остальное считается из них:
+#   время горения дуги   — по порогу тока (5 А)
+#   остановки            — промежутки между участками дуги
+#   скорость             — длина шва / время дуги
+#   расход газа и проволоки — время × норма из карты (ОЦЕНКА, не измерение)
+#
+# Поэтому прямо контролируются ток и напряжение, косвенно скорость,
+# а расход и межслойная температура — только расчётом и по времени пауз.
+
+class WeldStop(models.Model):
+    """Остановка внутри операции: дуга погасла и снова зажглась.
+
+    Создаётся порталом при разборе потока: промежуток между соседними
+    ArcRun длиннее порога считается остановкой. Короткие разрывы
+    (перехват, смена положения) — рабочие, длинные означают,
+    что шов успел остыть.
+    """
+
+    class Kind(models.TextChoices):
+        SHORT = "рабочая", "Рабочая пауза"
+        INTERPASS = "межслойная", "Между проходами"
+        LONG = "длительная", "Длительная остановка"
+
+    run = models.ForeignKey(
+        "OperationRun", on_delete=models.CASCADE,
+        related_name="stops", verbose_name="Выполнение операции",
+    )
+    # между какими участками дуги возникла пауза
+    after_arc = models.ForeignKey(
+        "ArcRun", on_delete=models.CASCADE,
+        related_name="stop_after", verbose_name="После участка дуги",
+    )
+
+    started_at = models.DateTimeField("Начало паузы")
+    finished_at = models.DateTimeField("Конец паузы", null=True, blank=True)
+    duration = models.DurationField("Длительность", null=True, blank=True)
+
+    kind = models.CharField(
+        "Тип", max_length=20, choices=Kind.choices, default=Kind.SHORT,
+    )
+    # межслойная температура нормирована в карте, но датчика нет.
+    # Косвенный признак: слишком долгая пауза — переохлаждение,
+    # слишком короткая — перегрев. Отмечаем для технолога
+    is_suspicious = models.BooleanField(
+        "Требует внимания", default=False,
+        help_text="Пауза выбивается из обычной для этого способа",
+    )
+    note = models.CharField("Примечание", max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = "Остановка"
+        verbose_name_plural = "Остановки"
+        ordering = ["run", "started_at"]
+        indexes = [models.Index(fields=["run", "started_at"])]
+
+    def __str__(self):
+        return f"Пауза {self.duration} ({self.run_id})"
+
+
+class Deviation(models.Model):
+    """Зафиксированное отклонение от режима карты.
+
+    Хранится, а не считается на лету: нарушение — это факт, который
+    нужен в прослеживаемости. Пересчёт по изменившейся карте не должен
+    задним числом стирать то, что уже произошло.
+    """
+
+    class Parameter(models.TextChoices):
+        CURRENT = "ток", "Ток сварки"
+        VOLTAGE = "напряжение", "Напряжение дуги"
+        SPEED = "скорость", "Скорость сварки"
+        PULSE_CURRENT = "ток_импульса", "Ток импульса"
+        PAUSE_CURRENT = "ток_паузы", "Ток паузы"
+        INTERPASS = "межслойная", "Межслойная пауза"
+        NO_CARD = "без_карты", "Сварка без техкарты"
+        NO_ATTESTATION = "без_допуска", "Сварщик без действующего допуска"
+
+    class Severity(models.TextChoices):
+        INFO = "замечание", "Замечание"
+        WARNING = "предупреждение", "Предупреждение"
+        CRITICAL = "нарушение", "Нарушение"
+
+    session = models.ForeignKey(
+        "WeldingSession", on_delete=models.CASCADE,
+        related_name="deviations", verbose_name="Сеанс",
+    )
+    pass_run = models.ForeignKey(
+        "WeldPassRun", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="deviations", verbose_name="Проход",
+    )
+
+    parameter = models.CharField(
+        "Параметр", max_length=20, choices=Parameter.choices,
+    )
+    severity = models.CharField(
+        "Уровень", max_length=20, choices=Severity.choices,
+        default=Severity.WARNING,
+    )
+
+    # что было по карте и что вышло по факту
+    planned_min = models.DecimalField(
+        "По карте от", max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    planned_max = models.DecimalField(
+        "По карте до", max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    actual_value = models.DecimalField(
+        "Фактически", max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    deviation_percent = models.DecimalField(
+        "Отклонение, %", max_digits=6, decimal_places=1, null=True, blank=True,
+    )
+
+    started_at = models.DateTimeField("Начало отклонения")
+    finished_at = models.DateTimeField("Конец отклонения", null=True, blank=True)
+    duration = models.DurationField(
+        "Длительность", null=True, blank=True,
+        help_text="Короткий выброс и устойчивый выход за допуск — разные вещи",
+    )
+
+    # технолог может признать отклонение несущественным
+    reviewed = models.BooleanField("Рассмотрено", default=False)
+    reviewed_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reviewed_deviations", verbose_name="Кто рассмотрел",
+    )
+    comment = models.TextField("Комментарий технолога", blank=True)
+
+    class Meta:
+        verbose_name = "Отклонение от режима"
+        verbose_name_plural = "Отклонения от режима"
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["session", "parameter"]),
+            models.Index(fields=["severity", "reviewed"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_parameter_display()}: {self.actual_value} ({self.severity})"
+
+
+class ConsumptionEstimate(models.Model):
+    """Расчётный расход материалов за операцию.
+
+    ВАЖНО: это ОЦЕНКА, а не измерение. Считается как время горения дуги
+    умноженное на норму из техкарты. Если газ не подали или редуктор сбит,
+    расчёт этого не покажет — расходомера в узле нет.
+
+    Проволока считается только для механизированных способов с подачей.
+    На ручной аргонодуговой присадку кладут рукой, и расчёт по времени
+    смысла не имеет — поле остаётся пустым.
+    """
+
+    run = models.OneToOneField(
+        "OperationRun", on_delete=models.CASCADE,
+        related_name="consumption", verbose_name="Выполнение операции",
+    )
+
+    arc_time_total = models.DurationField(
+        "Суммарное время горения дуги", null=True, blank=True,
+    )
+
+    gas_shield = models.DecimalField(
+        "Защитный газ, л", max_digits=9, decimal_places=2, null=True, blank=True,
+    )
+    gas_backing = models.DecimalField(
+        "Газ на поддув, л", max_digits=9, decimal_places=2, null=True, blank=True,
+    )
+    gas_plasma = models.DecimalField(
+        "Плазмообразующий газ, л", max_digits=9, decimal_places=2,
+        null=True, blank=True,
+    )
+    wire_length = models.DecimalField(
+        "Проволока, м", max_digits=9, decimal_places=2, null=True, blank=True,
+        help_text="Только для механизированных способов с подачей",
+    )
+
+    calculated_at = models.DateTimeField("Рассчитано", auto_now=True)
+
+    class Meta:
+        verbose_name = "Расчётный расход"
+        verbose_name_plural = "Расчётный расход"
+
+    def __str__(self):
+        return f"Расход по операции {self.run_id}"    

@@ -43,5 +43,69 @@ services:
     depends_on:
       - backend
 
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mqttdata:/mosquitto/data  
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: welding
+      CLICKHOUSE_USER: welding
+      CLICKHOUSE_PASSWORD: welding
+      # без этого ClickHouse не даст пользователю создавать таблицы
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - chdata:/var/lib/clickhouse
+      # файлы отсюда выполняются один раз при первом старте
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+    ports:
+      - "8123:8123"   # HTTP — сюда ходит Python и DBeaver
+      - "9000:9000"   # нативный протокол
+    ulimits:
+      # ClickHouse держит много открытых файлов, лимит по умолчанию мал
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 5s
+      retries: 10
+ 
+  collector:
+    build: ./collector
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      DB_HOST: db
+      DB_NAME: welding
+      DB_USER: welding
+      DB_PASSWORD: welding
+      CH_HOST: clickhouse
+      CH_PORT: "8123"
+      CH_DB: welding
+      CH_USER: welding
+      CH_PASSWORD: welding
+      DJANGO_SETTINGS_MODULE: config.settings
+    volumes:
+      - ./collector:/app
+      # модели берём из бэкенда, чтобы не дублировать описание таблиц
+      - ./backend:/backend
+    depends_on:
+      db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+    restart: unless-stopped
+
+
 volumes:
   pgdata:
+  mqttdata:
+  chdata:

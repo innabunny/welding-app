@@ -1,11 +1,27 @@
-import type { WelderWrite } from '@/shared/types/attestation'
-import { Checkbox, Field, Input, Select } from '@/shared/ui/Form'
-import { FormModal, type Editing, type Errors } from '@/shared/ui/FormModal'
-import { useSaveWelder, useWorkshops } from './queries'
+import type { WelderWrite } from '@/shared/types/attestation';
+import { Checkbox, Field, Input, Select } from '@/shared/ui/Form';
+import { FormModal, type Editing, type Errors } from '@/shared/ui/FormModal';
+import { useSaveWelder, useWorkshops } from './queries';
+import type { Workshop } from '@/shared/types/workshops';
 
-export function WelderFormModal({ editing, onClose }: { editing: Editing<WelderWrite>; onClose: () => void }) {
-  const save = useSaveWelder()
-  const workshops = useWorkshops()
+export function WelderFormModal({
+  editing,
+  onClose,
+}: {
+  editing: Editing<WelderWrite>;
+  onClose: () => void;
+}) {
+  const save = useSaveWelder();
+  const workshops = useWorkshops();
+
+  function normalizeUid(input: string): string {
+    const value = input.trim().toLowerCase();
+    if (!value) return '';
+    if(/^\d{8,10}$/.test(value)) {
+      return Number(value).toString(16).padStart(8, '0');
+    }
+    return value;
+  }
 
   return (
     <FormModal
@@ -18,8 +34,8 @@ export function WelderFormModal({ editing, onClose }: { editing: Editing<WelderW
         ...(d.fio.trim() ? {} : { fio: 'Укажите ФИО' }),
         ...(d.education.trim() ? {} : { education: 'Укажите образование' }),
         // UID карты — hex, как его читает считыватель
-        ...(d.rfidUid && !/^[0-9a-fA-F]{1,16}$/.test(d.rfidUid.trim())
-          ? { rfidUid: 'Только цифры 0–9 и буквы A–F, до 16 знаков' }
+        ...(d.rfidUid && !/^[0-9a-fA-F]{1,16}$/.test(normalizeUid(d.rfidUid))
+          ? { rfidUid: 'Введите UID в hex или номер, напечатанный на карте' }
           : {}),
       })}
       prepare={(d) => ({
@@ -28,19 +44,39 @@ export function WelderFormModal({ editing, onClose }: { editing: Editing<WelderW
         personnelNo: d.personnelNo.trim(),
         education: d.education.trim(),
         rank: d.rank.trim(),
-        rfidUid: d.rfidUid?.trim() || null,
+        rfidUid: d.rfidUid ? normalizeUid(d.rfidUid) || null : null,
       })}
     >
       {({ draft, update, errors }) => (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="ФИО" required error={errors.fio} className="sm:col-span-2">
+          <Field
+            label="ФИО"
+            required
+            error={errors.fio}
+            className="sm:col-span-2"
+          >
             {(id, d) => (
-              <Input id={id} aria-describedby={d} invalid={Boolean(errors.fio)} maxLength={200} value={draft.fio} placeholder="Иванов Иван Иванович" onChange={(e) => update({ fio: e.target.value })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                invalid={Boolean(errors.fio)}
+                maxLength={200}
+                value={draft.fio}
+                placeholder="Иванов Иван Иванович"
+                onChange={(e) => update({ fio: e.target.value })}
+              />
             )}
           </Field>
           <Field label="Табельный номер" error={errors.personnelNo}>
             {(id, d) => (
-              <Input id={id} aria-describedby={d} maxLength={20} className="font-mono" value={draft.personnelNo} onChange={(e) => update({ personnelNo: e.target.value })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                maxLength={20}
+                className="font-mono"
+                value={draft.personnelNo}
+                onChange={(e) => update({ personnelNo: e.target.value })}
+              />
             )}
           </Field>
           <Field label="Цех" error={errors.workshopId}>
@@ -49,10 +85,15 @@ export function WelderFormModal({ editing, onClose }: { editing: Editing<WelderW
                 id={id}
                 aria-describedby={d}
                 value={draft.workshopId ?? ''}
-                onChange={(e) => update({ workshopId: e.target.value === '' ? null : Number(e.target.value) })}
+                onChange={(e) =>
+                  update({
+                    workshopId:
+                      e.target.value === '' ? null : Number(e.target.value),
+                  })
+                }
               >
                 <option value="">Не указан</option>
-                {workshops.data?.map((w) => (
+                {workshops.data?.map((w: Workshop) => (
                   <option key={w.id} value={w.id}>
                     {w.number ? `${w.number} — ${w.name}` : w.name}
                   </option>
@@ -62,34 +103,79 @@ export function WelderFormModal({ editing, onClose }: { editing: Editing<WelderW
           </Field>
           <Field label="Образование" required error={errors.education}>
             {(id, d) => (
-              <Input id={id} aria-describedby={d} invalid={Boolean(errors.education)} maxLength={200} value={draft.education} placeholder="Например, среднее профессиональное" onChange={(e) => update({ education: e.target.value })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                invalid={Boolean(errors.education)}
+                maxLength={200}
+                value={draft.education}
+                placeholder="Например, среднее профессиональное"
+                onChange={(e) => update({ education: e.target.value })}
+              />
             )}
           </Field>
           <Field label="Разряд" error={errors.rank}>
             {(id, d) => (
-              <Input id={id} aria-describedby={d} maxLength={20} value={draft.rank} placeholder="5" onChange={(e) => update({ rank: e.target.value })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                maxLength={20}
+                value={draft.rank}
+                placeholder="5"
+                onChange={(e) => update({ rank: e.target.value })}
+              />
             )}
           </Field>
           <Field label="Дата рождения" error={errors.birthDate}>
             {(id, d) => (
-              <Input id={id} aria-describedby={d} type="date" value={draft.birthDate ?? ''} onChange={(e) => update({ birthDate: e.target.value || null })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                type="date"
+                value={draft.birthDate ?? ''}
+                onChange={(e) => update({ birthDate: e.target.value || null })}
+              />
             )}
           </Field>
           <Field label="Стаж по сварке с" error={errors.weldingSince}>
             {(id, d) => (
-              <Input id={id} aria-describedby={d} type="date" value={draft.weldingSince ?? ''} onChange={(e) => update({ weldingSince: e.target.value || null })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                type="date"
+                value={draft.weldingSince ?? ''}
+                onChange={(e) =>
+                  update({ weldingSince: e.target.value || null })
+                }
+              />
             )}
           </Field>
-          <Field label="UID карты (hex)" error={errors.rfidUid} hint="Для допуска к установке по RFID">
+          <Field
+            label="Номер RFID-карты"
+            error={errors.rfidUid}
+            hint="Номер, напечатанный на карте, или UID в hex"
+          >
             {(id, d) => (
-              <Input id={id} aria-describedby={d} invalid={Boolean(errors.rfidUid)} maxLength={16} className="font-mono" value={draft.rfidUid ?? ''} onChange={(e) => update({ rfidUid: e.target.value })} />
+              <Input
+                id={id}
+                aria-describedby={d}
+                invalid={Boolean(errors.rfidUid)}
+                maxLength={20}
+                className="font-mono"
+                value={draft.rfidUid ?? ''}
+                onChange={(e) => update({ rfidUid: e.target.value })}
+              />
             )}
           </Field>
           <div className="flex items-center">
-            <Checkbox label="Работает" checked={draft.isActive} onChange={(e) => update({ isActive: e.target.checked })} />
+            <Checkbox
+              label="Работает"
+              checked={draft.isActive}
+              onChange={(e) => update({ isActive: e.target.checked })}
+            />
           </div>
         </div>
       )}
     </FormModal>
-  )
+  );
 }

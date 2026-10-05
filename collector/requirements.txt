@@ -1,0 +1,8 @@
+# Django и psycopg нужны, потому что приёмник работает с теми же
+# моделями, что и бэкенд — описание таблиц не дублируется.
+Django
+psycopg[binary]
+djangorestframework
+djangorestframework-camel-case
+paho-mqtt>=2.0
+clickhouse-driver
