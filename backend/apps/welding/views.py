@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsTechnologyEditor
+from .samples import read_arc_samples, read_session_samples
 
 from .models import (
     ArcRun,
@@ -325,3 +326,53 @@ class RouteCodeViewSet(viewsets.ModelViewSet):
                 {"found": False, "detail": "Код не зарегистрирован"}, status=404
             )
         return Response({"found": True, **RouteCodeSerializer(rc).data})        
+
+
+class ArcRunViewSet(viewsets.ReadOnlyModelViewSet):
+    """Участки горения дуги.
+
+    Только чтение: записи создаёт приёмник телеметрии по данным
+    аппарата, вручную их не заводят и не правят.
+    """
+
+    queryset = ArcRun.objects.select_related(
+        "session", "session__equipment", "session__welder", "pass_run"
+    )
+    serializer_class = ArcRunSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        session = params.get("session")
+        if session:
+            qs = qs.filter(session_id=session)
+
+        # участки, которые приёмник не смог достроить:
+        # связь оборвалась, и конец участка не пришёл
+        if params.get("incomplete") == "1":
+            qs = qs.filter(telemetry_complete=False)
+
+        return qs.order_by("started_at")
+
+    @action(detail=True, methods=["get"])
+    def samples(self, request, pk=None):
+        """GET /api/arcs/<id>/samples/?points=1200
+
+        Точки для графика. Прореживание делает ClickHouse,
+        Django только передаёт параметры и отдаёт результат.
+        """
+        # get_object применяет права доступа и выдаёт 404, если
+        # участка нет. Без него можно было бы прочитать точки
+        # любого участка, подставив чужой id в адрес
+        arc = self.get_object()
+
+        try:
+            points = int(request.query_params.get("points", 2000))
+        except ValueError:
+            points = 2000
+        # ограничиваем сверху: запросом ?points=1000000
+        # иначе можно положить и ClickHouse, и браузер
+        points = max(50, min(points, 5000))
+
+        return Response(read_arc_samples(arc.id, points))

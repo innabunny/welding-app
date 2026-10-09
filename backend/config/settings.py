@@ -43,6 +43,7 @@ ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
+    'daphne',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -59,8 +60,8 @@ INSTALLED_APPS = [
     'apps.attestation',
     'apps.workshops',
     'apps.methods',
-    "apps.service",
-    "apps.demo",
+    'apps.service',
+    'apps.demo',
 ]
 
 MIDDLEWARE = [
@@ -90,7 +91,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+# WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = "config.asgi.application"
 
 
 # Database
@@ -223,5 +225,14 @@ else:
 MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+    },
+}
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.environ.get("REDIS_HOST", "redis"), 6379)],
+        },
     },
 }

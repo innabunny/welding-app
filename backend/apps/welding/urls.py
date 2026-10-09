@@ -8,6 +8,7 @@ from .views import (
     WeldingSessionViewSet,
     WeldViewSet,
     RouteCodeViewSet,
+    ArcRunViewSet
 )
 
 router = DefaultRouter()
@@ -17,5 +18,6 @@ router.register("operation-runs", OperationRunViewSet, basename="operation-run")
 router.register("inspections", InspectionViewSet, basename="inspection")
 router.register("welding-sessions", WeldingSessionViewSet, basename="welding-session")
 router.register("route-codes", RouteCodeViewSet, basename="route-code")
+router.register("arcs", ArcRunViewSet, basename="arc")
 
 urlpatterns = router.urls

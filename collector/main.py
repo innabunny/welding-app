@@ -35,6 +35,7 @@ django.setup()
 from apps.equipment.models import Equipment  # noqa: E402
 from apps.welders.models import Welder  # noqa: E402
 from apps.welding.models import ArcRun, WeldingSession  # noqa: E402
+from apps.welding.broadcast import send_event, send_live  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,7 +108,7 @@ class Collector:
         # плюс означает «любой узел»: подписка не меняется,
         # когда появляется второй аппарат
         for topic in ("weld/+/session", "weld/+/arc", "weld/+/samples",
-                      "weld/+/access", "weld/+/status"):
+                      "weld/+/access", "weld/+/status", "weld/+/live"):
             client.subscribe(topic, qos=1)
         log.info("подписался на темы узлов")
 
@@ -132,6 +133,8 @@ class Collector:
                 self.handle_access(client, data)
             elif kind == "status":
                 self.handle_status(data)
+            elif kind == "live":
+                self.handle_live(data)    
         except Exception:
             # один кривой пакет не должен ронять приёмник:
             # записали в лог и работаем дальше
@@ -164,6 +167,16 @@ class Collector:
                     "started_at": ms_to_dt(data["ts"]),
                 },
             )
+
+            send_event(data["node"], {
+                "event": "session_start",
+                "sid": sid,
+                "welder": welder.fio if welder else "",
+                "mode": data.get("mode", ""),
+            })
+ 
+
+
             log.info("сеанс %s начат на %s", sid, equipment.name)
 
         elif data.get("event") == "stop":
@@ -175,6 +188,7 @@ class Collector:
                 # здесь же запускается разбор: проходы, остановки,
                 # отклонения, расход. Пока синхронно, потом в Celery
                 self.analyze_later(session)
+                send_event(data["node"], {"event": "session_stop", "sid": sid})
 
     def handle_arc(self, data):
         """Участок непрерывного горения дуги."""
@@ -285,6 +299,21 @@ class Collector:
         """Узел жив. Пока только пишем в лог, позже — на панель."""
         if data.get("queued", 0) > 0:
             log.info("узел %s досылает %s порций", data["node"], data["queued"])
+
+    def handle_live(self, data):
+        """Живой поток: в базу не пишем, сразу в открытые панели.
+ 
+        Эти данные теряются без последствий — они нужны только
+        чтобы технолог видел, что происходит прямо сейчас.
+        """
+        send_live(data["node"], {
+            "i": data.get("i"),
+            "u": data.get("u"),
+            "arc": data.get("arc", False),
+            "sid": data.get("sid", ""),
+            "ts": data.get("ts"),
+        })
+
 
     # ───────────────────────── накопитель ─────────────────────────
 

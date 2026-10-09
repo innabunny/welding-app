@@ -6,3 +6,6 @@ djangorestframework
 djangorestframework-camel-case
 paho-mqtt>=2.0
 clickhouse-driver
+channels
+channels-redis
+daphne

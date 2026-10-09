@@ -21,13 +21,20 @@ services:
       DB_NAME: welding
       DB_USER: welding
       DB_PASSWORD: welding
+      REDIS_HOST: redis 
     volumes:
       - ./backend:/app
     ports:
       - "8000:8000"
+
+    command: >
+      sh -c "python manage.py migrate && 
+             daphne -b 0.0.0.0 -p 8000 config.asgi:application"  
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy  
 
   frontend:
     build: ./frontend
@@ -91,6 +98,7 @@ services:
       CH_USER: welding
       CH_PASSWORD: welding
       DJANGO_SETTINGS_MODULE: config.settings
+      REDIS_HOST: redis
     volumes:
       - ./collector:/app
       # модели берём из бэкенда, чтобы не дублировать описание таблиц
@@ -102,8 +110,21 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_started
+      redis: 
+        condition: service_healthy  
     restart: unless-stopped
 
+
+  redis:
+    image: redis:7-alpine
+    # шина между процессами: приёмник телеметрии кладёт сообщение,
+    # веб-сервер раздаёт его открытым браузерам
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
 
 volumes:
   pgdata:
