@@ -7,3 +7,4 @@ psycopg[binary]
 channels
 channels-redis
 daphne
+clickhouse-driver
