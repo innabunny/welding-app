@@ -5,6 +5,12 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsTechnologyEditor
 from .samples import read_arc_samples, read_session_samples
+from datetime import date, timedelta
+
+
+from apps.equipment.models import Equipment
+
+from .utilization import fleet_utilization
 
 from .models import (
     ArcRun,
@@ -15,7 +21,9 @@ from .models import (
     WeldingSession,
     WeldPassRun,
     RouteCode,
-)
+    NodeOutage,
+      NodeState,
+  )
 from .serializers import (
     ArcRunSerializer,
     InspectionSerializer,
@@ -25,6 +33,8 @@ from .serializers import (
     WeldPassportSerializer,
     WeldSerializer,
     RouteCodeSerializer,
+    NodeOutageSerializer,
+      NodeStateSerializer
 )
 
 
@@ -376,3 +386,165 @@ class ArcRunViewSet(viewsets.ReadOnlyModelViewSet):
         points = max(50, min(points, 5000))
 
         return Response(read_arc_samples(arc.id, points))
+
+class NodeStateViewSet(viewsets.ReadOnlyModelViewSet):
+    """Состояние узлов телеметрии.
+ 
+    Только чтение: эти строки пишет приёмник, руками их не правят.
+    """
+ 
+    queryset = NodeState.objects.select_related(
+        "equipment", "equipment__workstation",
+        "equipment__workstation__section",
+        "equipment__workstation__section__workshop",
+        )
+    serializer_class = NodeStateSerializer
+ 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+ 
+        if params.get("offline") == "1":
+            qs = qs.filter(is_online=False)
+ 
+        # узлы, которые есть в сети, но не внесены в справочник
+        if params.get("unlinked") == "1":
+            qs = qs.filter(equipment__isnull=True)
+ 
+        return qs
+ 
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        """GET /api/nodes/summary/
+ 
+        Счётчики для плашки на дашборде: сколько узлов на связи,
+        сколько молчит, сколько догоняет данные.
+        """
+        qs = self.get_queryset()
+        total = qs.count()
+        offline = qs.filter(is_online=False).count()
+        catching_up = qs.filter(is_online=True, queued__gt=0).count()
+ 
+        return Response({
+            "total": total,
+            "online": total - offline,
+            "offline": offline,
+            "catchingUp": catching_up,
+            # узлы в сети, но без привязки к оборудованию —
+            # повод сходить в справочник и завести запись
+            "unlinked": qs.filter(equipment__isnull=True).count(),
+        })
+ 
+    @action(detail=True, methods=["get"])
+    def outages(self, request, pk=None):
+        """GET /api/nodes/<id>/outages/?from=...&to=...
+ 
+        История пропаданий связи. Для страницы диагностики узла.
+        """
+        node = self.get_object()
+        qs = node.outages.all()
+ 
+        params = request.query_params
+        if params.get("from"):
+            qs = qs.filter(started_at__gte=params["from"])
+        if params.get("to"):
+            qs = qs.filter(started_at__lte=params["to"])
+ 
+        return Response(NodeOutageSerializer(qs[:200], many=True).data)
+
+class UtilizationViewSet(viewsets.ViewSet):
+    """Загрузка оборудования: Кз и раскладка фонда времени.
+ 
+    ViewSet, а не ModelViewSet: за этим адресом нет модели,
+    только расчёт. Записей в базе «загрузка» не существует.
+    """
+ 
+    @action(detail=False, methods=["get"], url_path="")
+    def report(self, request):
+        """GET /api/utilization/?from=2026-10-01&to=2026-10-22&workshop=3
+ 
+        Параметры:
+          from, to   — период, ГГГГ-ММ-ДД (обязательны)
+          workshop   — цех
+          equipment  — конкретный аппарат
+          method     — способ сварки
+          elapsed=1  — не считать время, которое ещё не прошло
+        """
+        params = request.query_params
+ 
+        try:
+            date_from = date.fromisoformat(params["from"])
+            date_to = date.fromisoformat(params["to"])
+        except (KeyError, ValueError):
+            return Response(
+                {"detail": "Нужны параметры from и to в виде ГГГГ-ММ-ДД"}, status=400
+            )
+ 
+        if date_to < date_from:
+            return Response({"detail": "Конец периода раньше начала"}, status=400)
+        if (date_to - date_from) > timedelta(days=400):
+            return Response({"detail": "Период больше года"}, status=400)
+ 
+        qs = Equipment.objects.filter(is_active=True).select_related(
+            "workstation", "workstation__section", "workstation__section__workshop",
+            "method",
+        )
+ 
+        workshop = params.get("workshop")
+        if workshop:
+            qs = qs.filter(workstation__section__workshop_id=workshop)
+ 
+        equipment = params.get("equipment")
+        if equipment:
+            qs = qs.filter(id=equipment)
+ 
+        method = params.get("method")
+        if method:
+            qs = qs.filter(method_id=method)
+ 
+        # Расчёт идёт по дням в Python, поэтому ограничиваем набор:
+        # сто аппаратов за год — это много тысяч отрезков
+        if qs.count() > 200:
+            return Response(
+                {"detail": "Слишком много оборудования, уточните фильтр"}, status=400
+            )
+ 
+        until = timezone.localtime() if params.get("elapsed") == "1" else None
+        result = fleet_utilization(qs, date_from, date_to, until=until)
+ 
+        return Response({
+            "from": date_from,
+            "to": date_to,
+            "fundSeconds": result["fund_seconds"],
+            "arcSeconds": result["arc_seconds"],
+            "standbySeconds": result["standby_seconds"],
+            "noDataSeconds": result["no_data_seconds"],
+            "idleSeconds": result["idle_seconds"],
+            "outsideShiftSeconds": result["outside_shift_seconds"],
+            "kz": result["kz"],
+            "kzAvailable": result["kz_available"],
+            "equipmentCount": result["equipment_count"],
+            "items": [
+                {
+                    "equipmentId": r.equipment_id,
+                    "equipmentName": r.equipment_name,
+                    "fundSeconds": r.fund_seconds,
+                    "arcSeconds": r.arc_seconds,
+                    "standbySeconds": r.standby_seconds,
+                    "noDataSeconds": r.no_data_seconds,
+                    "idleSeconds": r.idle_seconds,
+                    "outsideShiftSeconds": r.outside_shift_seconds,
+                    "kz": r.kz,
+                    "kzAvailable": r.kz_available,
+                    "sessions": r.sessions,
+                    "arcs": r.arcs,
+                    # расхождение баланса: в норме ноль. Отдаём наружу,
+                    # чтобы ошибку расчёта было видно, а не искать потом,
+                    # почему проценты не сходятся
+                    "balanceErrorSeconds": r.balance_error_seconds,
+                }
+                for r in result["items"]
+            ],
+        })
+        
+    

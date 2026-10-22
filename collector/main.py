@@ -36,6 +36,7 @@ from apps.equipment.models import Equipment  # noqa: E402
 from apps.welders.models import Welder  # noqa: E402
 from apps.welding.models import ArcRun, WeldingSession  # noqa: E402
 from apps.welding.broadcast import send_event, send_live  # noqa: E402
+from apps.welding.watchdog import check_offline, touch  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +70,7 @@ class Collector:
         # кэш: идентификатор участка от узла → id строки в Postgres.
         # Чтобы не ходить в базу на каждую порцию замеров
         self.arc_ids: dict[tuple[str, int], int] = {}
+        self.last_watch = time.monotonic()
 
     # ─────────────────────────── MQTT ───────────────────────────
 
@@ -95,10 +97,29 @@ class Collector:
             while True:
                 time.sleep(1)
                 self.flush_if_due()
+                self.watch_if_due()
         except KeyboardInterrupt:
             log.info("остановка, сбрасываю накопитель")
             self.flush()
             client.loop_stop()
+
+
+    def watch_if_due(self):
+        """Раз в пять секунд проверяем, не потерялся ли узел.
+ 
+        Чаще не нужно: таймаут всё равно тридцать секунд.
+        """
+        if time.monotonic() - self.last_watch < 5:
+            return
+        self.last_watch = time.monotonic()
+        try:
+            lost = check_offline()
+            if lost:
+                log.warning("узлов потеряно: %s", lost)
+        except Exception:
+            # сторож не должен ронять приём данных
+            log.exception("ошибка проверки связи")        
+
 
     def on_connect(self, client, userdata, flags, reason_code, properties=None):
         if reason_code != 0:
@@ -121,6 +142,9 @@ class Collector:
             return
 
         kind = msg.topic.rsplit("/", 1)[-1]
+        node = data.get("node")
+        if node:
+            touch(node)
 
         try:
             if kind == "session":
@@ -296,7 +320,22 @@ class Collector:
         log.info("допуск %s для %s: %s", uid, node, answer["allowed"])
 
     def handle_status(self, data):
-        """Узел жив. Пока только пишем в лог, позже — на панель."""
+        """Узел жив и рассказывает о своём состоянии.
+ 
+        Эти поля идут на страницу диагностики. Приходят раз в десять
+        секунд, поэтому пишем только то, что пришло.
+        """
+        touch(
+            data["node"],
+            last_status_at=timezone.now(),
+            queued=data.get("queued", 0),
+            ip=data.get("ip"),
+            firmware=data.get("fw"),
+            uptime_seconds=data.get("uptime"),
+            free_bytes=data.get("free"),
+            temperature=data.get("temp"),
+            reset_reason=data.get("reset", ""),
+        )
         if data.get("queued", 0) > 0:
             log.info("узел %s досылает %s порций", data["node"], data["queued"])
 

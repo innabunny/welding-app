@@ -14,6 +14,8 @@ from .models import (
     WeldingSession,
     WeldPassRun,
     RouteCode,
+    NodeOutage,
+      NodeState
 )
 
 
@@ -372,3 +374,42 @@ class RouteCodeSerializer(serializers.ModelSerializer):
             "instance", "serial_no",
             "source", "created_at",
         ]
+
+class NodeOutageSerializer(serializers.ModelSerializer):
+    duration_seconds = serializers.IntegerField(read_only=True)
+    kind_name = serializers.CharField(source="get_kind_display", read_only=True)
+
+    class Meta:
+        model = NodeOutage
+        fields = [
+            "id", "started_at", "finished_at",
+            "kind", "kind_name", "duration_seconds",
+        ]
+
+
+class NodeStateSerializer(serializers.ModelSerializer):
+    equipment_name = serializers.CharField(
+        source="equipment.name", read_only=True, default=""
+    )
+    workshop_name = serializers.CharField(
+        source="equipment.workshop.name", read_only=True, default=""
+    )
+    # сколько секунд назад было последнее сообщение — фронту так
+    # удобнее, чем вычитать даты и ловить разницу часовых поясов
+    silent_seconds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NodeState
+        fields = [
+            "id", "node_id", "equipment", "equipment_name", "workshop_name",
+            "is_online", "last_seen_at", "last_status_at", "silent_seconds",
+            "queued", "ip", "firmware", "uptime_seconds", "free_bytes",
+            "temperature", "reset_reason",
+        ]
+
+    def get_silent_seconds(self, obj) -> int | None:
+        if obj.last_seen_at is None:
+            return None
+        from django.utils import timezone
+
+        return int((timezone.now() - obj.last_seen_at).total_seconds())        

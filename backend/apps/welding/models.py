@@ -676,3 +676,120 @@ class ConsumptionEstimate(models.Model):
 
     def __str__(self):
         return f"Расход по операции {self.run_id}"    
+
+# Состояние узлов телеметрии: кто на связи, кто молчит и когда молчал.
+#
+# Узел не умеет сообщить «я выключился» — на то он и выключился.
+# Поэтому пропажу замечает портал: если узел давно не писал,
+# значит связи нет. Эти две таблицы и хранят такие наблюдения.
+
+class NodeState(models.Model):
+    """Текущее состояние узла. Одна строка на узел, перезаписывается.
+
+    Отдельно от Equipment намеренно: оборудование — это справочник,
+    он меняется раз в год, а эта строка обновляется каждые пару секунд.
+    Мешать их — значит дёргать справочник непрерывными записями.
+    """
+
+    # Идентификатор из темы MQTT: weld/<node_id>/...
+    node_id = models.CharField("узел", max_length=64, unique=True)
+
+    # Узел может появиться в сети раньше, чем его внесут в справочник,
+    # поэтому связь необязательная: строку создадим всё равно,
+    # а на панели покажем «узел не привязан к оборудованию»
+    equipment = models.ForeignKey(
+        "equipment.Equipment",
+        verbose_name="оборудование",
+        on_delete=models.SET_NULL,
+        related_name="node_states",
+        null=True,
+        blank=True,
+    )
+
+    # Любое сообщение от узла обновляет это поле. Именно по нему
+    # решается, на связи он или нет
+    last_seen_at = models.DateTimeField("последнее сообщение", null=True, blank=True)
+    # Отдельно — последний status: он приходит по расписанию,
+    # а остальные сообщения только во время сварки
+    last_status_at = models.DateTimeField("последний status", null=True, blank=True)
+
+    is_online = models.BooleanField("на связи", default=False)
+
+    # Сколько порций замеров узел не смог отправить и держит у себя.
+    # Больше нуля означает, что связь была, данные догоняют
+    queued = models.PositiveIntegerField("ждёт выгрузки, порций", default=0)
+
+    # Диагностика — то, что узел сообщает о себе сам
+    ip = models.GenericIPAddressField("адрес", null=True, blank=True)
+    firmware = models.CharField("версия прошивки", max_length=40, blank=True)
+    uptime_seconds = models.PositiveIntegerField("наработка, с", null=True, blank=True)
+    free_bytes = models.PositiveBigIntegerField("свободно, байт", null=True, blank=True)
+    temperature = models.DecimalField(
+        "температура, °C", max_digits=5, decimal_places=1, null=True, blank=True
+    )
+
+    # Причина последнего пуска: по питанию, по сбросу, по сторожевому
+    # таймеру. Нужна, чтобы отличить «выдернули кабель питания»
+    # от «прошивка повисла и перезапустилась сама»
+    reset_reason = models.CharField("причина пуска", max_length=40, blank=True)
+
+    class Meta:
+        verbose_name = "состояние узла"
+        verbose_name_plural = "состояние узлов"
+        ordering = ["node_id"]
+
+    def __str__(self):
+        where = self.equipment.name if self.equipment else "без привязки"
+        return f"{self.node_id} ({where})"
+
+
+class NodeOutage(models.Model):
+    """Период, когда узел был не на связи.
+
+    Одна строка на обрыв, а не на каждую секунду молчания.
+    Пока связи нет, finished_at пустой — это открытый обрыв.
+
+    Зачем вообще хранить: время без связи нельзя записать ни в работу,
+    ни в простой. Мы не знаем, что происходило. При расчёте Кз оно
+    вычитается из фонда отдельной категорией «нет данных», иначе
+    коэффициент окажется заниженным без всякой вины цеха.
+    """
+
+    node = models.ForeignKey(
+        NodeState,
+        verbose_name="узел",
+        on_delete=models.CASCADE,
+        related_name="outages",
+    )
+
+    started_at = models.DateTimeField("с")
+    finished_at = models.DateTimeField("по", null=True, blank=True)
+
+    # Что мы поняли про причину. Узел, вернувшись, сообщает причину
+    # пуска, и по ней обрыв дополняется задним числом
+    KINDS = [
+        ("нет связи", "нет связи"),
+        ("без питания", "узел был без питания"),
+        ("перезапуск", "узел перезапустился"),
+    ]
+    kind = models.CharField("вид", max_length=20, choices=KINDS, default="нет связи")
+
+    class Meta:
+        verbose_name = "пропадание связи"
+        verbose_name_plural = "пропадания связи"
+        ordering = ["-started_at"]
+        indexes = [
+            # Запрос «обрывы за период» — основной, по нему и индекс
+            models.Index(fields=["node", "started_at"]),
+        ]
+
+    def __str__(self):
+        end = f"{self.finished_at:%d.%m %H:%M}" if self.finished_at else "идёт"
+        return f"{self.node.node_id}: {self.started_at:%d.%m %H:%M} — {end}"
+
+    @property
+    def duration_seconds(self) -> int | None:
+        """Сколько длился обрыв. None, если ещё идёт."""
+        if self.finished_at is None:
+            return None
+        return int((self.finished_at - self.started_at).total_seconds())    

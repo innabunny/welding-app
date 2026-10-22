@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'apps.methods',
     'apps.service',
     'apps.demo',
+    "apps.shifts",
 ]
 
 MIDDLEWARE = [
@@ -187,7 +188,7 @@ REST_FRAMEWORK = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "Europe/Moscow"
 
 USE_I18N = True
 

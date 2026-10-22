@@ -9,6 +9,8 @@ from .models import (
     Weld,
     WeldingSession,
     WeldPassRun,
+    NodeState,
+    NodeOutage,
 )
 
 
@@ -128,3 +130,27 @@ class WeldingSessionAdmin(admin.ModelAdmin):
     @admin.display(description="Участков дуги")
     def arcs_count(self, obj):
         return obj.arcs.count()
+
+@admin.register(NodeState)
+class NodeStateAdmin(admin.ModelAdmin):
+    list_display = [
+        "node_id", "equipment", "is_online", "last_seen_at",
+        "queued", "ip", "firmware", "temperature",
+    ]
+    list_filter = ["is_online"]
+    list_select_related = ["equipment"]
+    # строки пишет приёмник; в админке их только смотрят,
+    # кроме привязки к оборудованию
+    readonly_fields = [
+        "node_id", "last_seen_at", "last_status_at", "is_online",
+        "queued", "ip", "firmware", "uptime_seconds", "free_bytes",
+        "temperature", "reset_reason",
+    ]
+ 
+ 
+@admin.register(NodeOutage)
+class NodeOutageAdmin(admin.ModelAdmin):
+    list_display = ["node", "started_at", "finished_at", "kind"]
+    list_filter = ["kind", "node"]
+    date_hierarchy = "started_at"
+    list_select_related = ["node"]        
