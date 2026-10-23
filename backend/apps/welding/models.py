@@ -568,10 +568,14 @@ class Deviation(models.Model):
         NO_CARD = "без_карты", "Сварка без техкарты"
         NO_ATTESTATION = "без_допуска", "Сварщик без действующего допуска"
 
+    
+
     class Severity(models.TextChoices):
         INFO = "замечание", "Замечание"
         WARNING = "предупреждение", "Предупреждение"
         CRITICAL = "нарушение", "Нарушение"
+
+    ORGANIZATIONAL = {Parameter.NO_CARD, Parameter.NO_ATTESTATION}
 
     session = models.ForeignKey(
         "WeldingSession", on_delete=models.CASCADE,
@@ -613,11 +617,6 @@ class Deviation(models.Model):
 
     # технолог может признать отклонение несущественным
     reviewed = models.BooleanField("Рассмотрено", default=False)
-    reviewed_by = models.ForeignKey(
-        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="reviewed_deviations", verbose_name="Кто рассмотрел",
-    )
-    comment = models.TextField("Комментарий технолога", blank=True)
 
     class Meta:
         verbose_name = "Отклонение от режима"
@@ -628,6 +627,10 @@ class Deviation(models.Model):
             models.Index(fields=["severity", "reviewed"]),
         ]
 
+    @property
+    def is_organizational(self) -> bool:
+        return self.parameter in self.ORGANIZATIONAL
+    
     def __str__(self):
         return f"{self.get_parameter_display()}: {self.actual_value} ({self.severity})"
 
@@ -793,3 +796,96 @@ class NodeOutage(models.Model):
         if self.finished_at is None:
             return None
         return int((self.finished_at - self.started_at).total_seconds())    
+
+class WeldDecision(models.Model):
+    """Решение по отклонениям от режима или нарушениям порядка."""
+ 
+    class Result(models.TextChoices):
+        ALLOWED = "допущено", "Допущено без мероприятий"
+        TO_CONTROL = "на контроль", "Назначен дополнительный контроль"
+        TO_REWORK = "на переварку", "Выборка и переварка"
+        # Для организационных нарушений: сварка без карты, сварщик
+        # без действующего допуска. Их не допускают и не переваривают —
+        # их разбирают с мастером. Но отметить, что случай не забыт,
+        # нужно, иначе очередь копится и на неё перестают смотреть
+        HANDLED = "разобрано", "Разобрано, мероприятия приняты"
+ 
+    # Сеанс есть ВСЕГДА — это корень телеметрии. Шва может не быть:
+    # при сварке без карты узел записал процесс, а к какой детали
+    # он относится, неизвестно. Поэтому обязательна связь с сеансом,
+    # а не со швом
+    session = models.ForeignKey(
+        "WeldingSession", on_delete=models.CASCADE,
+        related_name="decisions", verbose_name="Сеанс",
+    )
+ 
+    # Шов — когда понятно, к чему относится. Для организационных
+    # нарушений обычно пусто
+    weld = models.ForeignKey(
+        "Weld", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="decisions", verbose_name="Шов",
+    )
+    # Операция — когда решение касается только её. Переварить корень
+    # можно, лишь пока его не заварили сверху, поэтому по корню решают
+    # отдельно и сразу. А «назначить РК» относится к шву целиком
+    # и имеет смысл только после всех операций
+    run = models.ForeignKey(
+        "OperationRun", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="decisions", verbose_name="Операция",
+    )
+ 
+    result = models.CharField(
+        "Решение", max_length=20, choices=Result.choices,
+    )
+ 
+    # Какие именно отклонения закрыты. Многие-ко-многим, потому что
+    # одно решение обычно накрывает несколько просадок подряд:
+    # технолог смотрит на шов, а не на каждую секунду по отдельности
+    deviations = models.ManyToManyField(
+        "Deviation", related_name="decisions", blank=True,
+        verbose_name="Отклонения",
+    )
+ 
+    # PROTECT: пользователя с решениями удалить нельзя.
+    # Подпись под решением должна читаться годы спустя
+    author = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT,
+        related_name="weld_decisions", verbose_name="Принял",
+    )
+    author_name = models.CharField("Принял (снимок)", max_length=200, blank=True)
+    created_at = models.DateTimeField("Когда", auto_now_add=True)
+ 
+    # Обоснование. Свободный текст: утверждённой формы допуска
+    # отклонения на предприятии нет, и заводить справочник раньше,
+    # чем появится практика, бессмысленно
+    reason = models.TextField("Обоснование", blank=True)
+ 
+    # Что назначено при решении «на контроль». Пока строка; позже
+    # свяжется с заявкой в лабораторию
+    assigned_control = models.CharField(
+        "Назначенный контроль", max_length=100, blank=True,
+        help_text="РК, УЗК, ВИК — через запятую",
+    )
+ 
+    class Meta:
+        verbose_name = "Решение по отклонению"
+        verbose_name_plural = "Решения по отклонениям"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["session", "-created_at"]),
+            models.Index(fields=["weld", "-created_at"]),
+            models.Index(fields=["result"]),
+        ]
+ 
+    def save(self, *args, **kwargs):
+        # снимок подписи делается один раз, при создании, и больше
+        # не трогается: человек может уволиться или сменить фамилию,
+        # а под решением должна остаться та, что была тогда
+        if self.author_id and not self.author_name:
+            self.author_name = self.author.name
+        super().save(*args, **kwargs)
+ 
+    def __str__(self):
+        where = self.weld or self.session
+        return f"{where}: {self.result}"
+         

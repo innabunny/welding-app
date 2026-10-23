@@ -34,6 +34,7 @@ urlpatterns = [
     path("api/", include("apps.workshops.urls")),
     path("api/", include("apps.service.urls")),
     path("api/", include("apps.shifts.urls")),
+    
 ]
 
 

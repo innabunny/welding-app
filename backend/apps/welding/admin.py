@@ -11,6 +11,8 @@ from .models import (
     WeldPassRun,
     NodeState,
     NodeOutage,
+    Deviation,
+    WeldDecision,
 )
 
 
@@ -154,3 +156,30 @@ class NodeOutageAdmin(admin.ModelAdmin):
     list_filter = ["kind", "node"]
     date_hierarchy = "started_at"
     list_select_related = ["node"]        
+
+@admin.register(Deviation)
+class DeviationAdmin(admin.ModelAdmin):
+    list_display = [
+        "started_at", "parameter", "severity", "actual_value",
+        "planned_min", "planned_max", "session", "reviewed",
+    ]
+    list_filter = ["parameter", "severity", "reviewed"]
+    date_hierarchy = "started_at"
+    list_select_related = ["session", "session__equipment"]
+    # записи создаёт разбор телеметрии: в админке их только смотрят
+    readonly_fields = [
+        "session", "pass_run", "parameter", "severity",
+        "planned_min", "planned_max", "actual_value", "deviation_percent",
+        "started_at", "finished_at", "duration",
+    ]
+ 
+ 
+@admin.register(WeldDecision)
+class WeldDecisionAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "result", "weld", "run", "author_name"]
+    list_filter = ["result", "created_at"]
+    list_select_related = ["session", "weld", "run", "author"]
+    # отклонений на одно решение бывает много: выбор двумя списками
+    # вместо многострочного поля
+    filter_horizontal = ["deviations"]
+    readonly_fields = ["author_name", "created_at"]    

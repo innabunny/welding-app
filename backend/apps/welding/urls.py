@@ -11,6 +11,8 @@ from .views import (
     ArcRunViewSet,
     NodeStateViewSet,
     UtilizationViewSet,
+    WeldDecisionViewSet,
+    DeviationViewSet,
 )
 
 router = DefaultRouter()
@@ -23,5 +25,7 @@ router.register("route-codes", RouteCodeViewSet, basename="route-code")
 router.register("arcs", ArcRunViewSet, basename="arc")
 router.register("nodes", NodeStateViewSet, basename="node")
 router.register("utilization", UtilizationViewSet, basename="utilization")
+router.register("weld-decisions", WeldDecisionViewSet, basename="weld-decision")
+router.register("deviations", DeviationViewSet, basename="deviation")
 
 urlpatterns = router.urls

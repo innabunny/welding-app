@@ -15,7 +15,10 @@ from .models import (
     WeldPassRun,
     RouteCode,
     NodeOutage,
-      NodeState
+    NodeState,
+    Deviation,
+    WeldDecision,
+
 )
 
 
@@ -413,3 +416,140 @@ class NodeStateSerializer(serializers.ModelSerializer):
         from django.utils import timezone
 
         return int((timezone.now() - obj.last_seen_at).total_seconds())        
+
+
+class DeviationSerializer(serializers.ModelSerializer):
+    """Отклонение от режима. Только чтение: записи создаёт разбор.
+ 
+    Пути вроде session.equipment.name длинные, зато не требуют
+    лишних запросов — вьюсет подтягивает всё через select_related.
+    """
+ 
+    parameter_name = serializers.CharField(
+        source="get_parameter_display", read_only=True
+    )
+    severity_name = serializers.CharField(
+        source="get_severity_display", read_only=True
+    )
+    is_organizational = serializers.BooleanField(read_only=True)
+ 
+    equipment_name = serializers.CharField(
+        source="session.equipment.name", read_only=True, default=""
+    )
+    # снимок фамилии: сварщик мог уволиться
+    welder_name = serializers.CharField(
+        source="session.welder_name", read_only=True, default=""
+    )
+    mode = serializers.CharField(source="session.mode", read_only=True, default="")
+ 
+    # цепочка до детали есть только у сварки по техпроцессу
+    part_number = serializers.CharField(
+        source="pass_run.run.weld.instance.part.number",
+        read_only=True, default="",
+    )
+    serial_no = serializers.CharField(
+        source="pass_run.run.weld.instance.serial_no",
+        read_only=True, default="",
+    )
+    seam_number = serializers.CharField(
+        source="pass_run.run.weld.seam.number", read_only=True, default=""
+    )
+    operation_number = serializers.CharField(
+        source="pass_run.run.operation.number", read_only=True, default=""
+    )
+    pass_no = serializers.IntegerField(
+        source="pass_run.no", read_only=True, default=None
+    )
+    # нужен фронту, чтобы было куда отправлять решение
+    weld_id = serializers.IntegerField(
+        source="pass_run.run.weld_id", read_only=True, default=None
+    )
+    run_id = serializers.IntegerField(
+        source="pass_run.run_id", read_only=True, default=None
+    )
+ 
+    duration_seconds = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = Deviation
+        fields = [
+            "id", "session", "pass_run",
+            "parameter", "parameter_name", "severity", "severity_name",
+            "is_organizational",
+            "planned_min", "planned_max", "actual_value", "deviation_percent",
+            "started_at", "finished_at", "duration_seconds",
+            "reviewed",
+            "equipment_name", "welder_name", "mode",
+            "part_number", "serial_no", "seam_number", "operation_number",
+            "pass_no", "weld_id", "run_id",
+        ]
+ 
+    def get_duration_seconds(self, obj) -> int | None:
+        """DurationField приходит строкой вида '00:00:12'.
+ 
+        Фронту удобнее число: форматировать и сравнивать проще,
+        чем разбирать строку.
+        """
+        return int(obj.duration.total_seconds()) if obj.duration else None
+ 
+ 
+class WeldDecisionSerializer(serializers.ModelSerializer):
+    result_name = serializers.CharField(source="get_result_display", read_only=True)
+ 
+    equipment_name = serializers.CharField(
+        source="session.equipment.name", read_only=True, default=""
+    )
+    part_number = serializers.CharField(
+        source="weld.instance.part.number", read_only=True, default=""
+    )
+    serial_no = serializers.CharField(
+        source="weld.instance.serial_no", read_only=True, default=""
+    )
+    seam_number = serializers.CharField(
+        source="weld.seam.number", read_only=True, default=""
+    )
+    operation_number = serializers.CharField(
+        source="run.operation.number", read_only=True, default=""
+    )
+ 
+    class Meta:
+        model = WeldDecision
+        fields = [
+            "id", "session", "weld", "run",
+            "result", "result_name", "deviations",
+            "author", "author_name", "created_at",
+            "reason", "assigned_control",
+            "equipment_name", "part_number", "serial_no",
+            "seam_number", "operation_number",
+        ]
+        # автора и подпись ставит сервер: нельзя подписаться за другого
+        read_only_fields = ["author", "author_name", "created_at"]
+ 
+    def validate(self, attrs):
+        """Проверки, которые нельзя выразить полями.
+ 
+        Первая: отклонения должны относиться к тому же сеансу.
+        Иначе можно закрыть решением по одному шву отклонения
+        с другого аппарата — случайно или нарочно.
+        """
+        session = attrs.get("session") or getattr(self.instance, "session", None)
+        deviations = attrs.get("deviations")
+ 
+        if session and deviations:
+            foreign = [d.id for d in deviations if d.session_id != session.id]
+            if foreign:
+                raise serializers.ValidationError({
+                    "deviations": f"Отклонения из другого сеанса: {foreign}"
+                })
+ 
+        # Вторая: «на контроль» без указания метода бессмысленно —
+        # непонятно, что назначили
+        result = attrs.get("result") or getattr(self.instance, "result", None)
+        control = attrs.get("assigned_control", "")
+        if result == "на контроль" and not control.strip():
+            raise serializers.ValidationError({
+                "assigned_control": "Укажите вид контроля: РК, УЗК, ВИК"
+            })
+ 
+        return attrs
+ 

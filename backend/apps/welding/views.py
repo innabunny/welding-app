@@ -22,7 +22,9 @@ from .models import (
     WeldPassRun,
     RouteCode,
     NodeOutage,
-      NodeState,
+    NodeState,
+    Deviation,
+    WeldDecision
   )
 from .serializers import (
     ArcRunSerializer,
@@ -34,7 +36,9 @@ from .serializers import (
     WeldSerializer,
     RouteCodeSerializer,
     NodeOutageSerializer,
-      NodeStateSerializer
+    NodeStateSerializer,
+    DeviationSerializer,
+    WeldDecisionSerializer
 )
 
 
@@ -547,4 +551,161 @@ class UtilizationViewSet(viewsets.ViewSet):
             ],
         })
         
-    
+class DeviationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Отклонения от режима и нарушения порядка.
+ 
+    Только чтение: записи создаёт разбор телеметрии. Человек
+    не правит отклонение, а принимает по нему решение —
+    это отдельная сущность.
+    """
+ 
+    queryset = Deviation.objects.select_related(
+        "session", "session__equipment", "session__welder",
+        "pass_run", "pass_run__run", "pass_run__run__weld",
+        "pass_run__run__weld__instance",
+        "pass_run__run__weld__instance__part",
+        "pass_run__run__weld__seam",
+        "pass_run__run__operation",
+    )
+    serializer_class = DeviationSerializer
+ 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+ 
+        # Два разных списка для двух разных людей.
+        # scope=режим — очередь технолога: ток, напряжение, скорость.
+        # scope=порядок — мастеру: сварка без карты, работа без допуска
+        scope = params.get("scope")
+        if scope == "режим":
+            qs = qs.exclude(parameter__in=Deviation.ORGANIZATIONAL)
+        elif scope == "порядок":
+            qs = qs.filter(parameter__in=Deviation.ORGANIZATIONAL)
+ 
+        # ждут решения — то, ради чего всё и сделано
+        if params.get("pending") == "1":
+            qs = qs.filter(reviewed=False)
+ 
+        equipment = params.get("equipment")
+        if equipment:
+            qs = qs.filter(session__equipment_id=equipment)
+ 
+        welder = params.get("welder")
+        if welder:
+            qs = qs.filter(session__welder_id=welder)
+ 
+        workshop = params.get("workshop")
+        if workshop:
+            qs = qs.filter(
+                session__equipment__workstation__section__workshop_id=workshop
+            )
+ 
+        weld = params.get("weld")
+        if weld:
+            qs = qs.filter(pass_run__run__weld_id=weld)
+ 
+        run = params.get("run")
+        if run:
+            qs = qs.filter(pass_run__run_id=run)
+ 
+        session = params.get("session")
+        if session:
+            qs = qs.filter(session_id=session)
+ 
+        parameter = params.get("parameter")
+        if parameter:
+            qs = qs.filter(parameter=parameter)
+ 
+        severity = params.get("severity")
+        if severity:
+            qs = qs.filter(severity=severity)
+ 
+        if params.get("from"):
+            qs = qs.filter(started_at__gte=params["from"])
+        if params.get("to"):
+            qs = qs.filter(started_at__lte=params["to"])
+ 
+        return qs
+ 
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        """GET /api/deviations/summary/
+ 
+        Счётчики для плитки «Отклонения» и для плашки мастера.
+        """
+        base = self.get_queryset()
+ 
+        regime = base.exclude(parameter__in=Deviation.ORGANIZATIONAL)
+        order = base.filter(parameter__in=Deviation.ORGANIZATIONAL)
+ 
+        by_severity = dict(
+            regime.values_list("severity").annotate(n=Count("id"))
+        )
+ 
+        return Response({
+            "regime": {
+                "total": regime.count(),
+                "pending": regime.filter(reviewed=False).count(),
+                "info": by_severity.get("замечание", 0),
+                "warning": by_severity.get("предупреждение", 0),
+                "critical": by_severity.get("нарушение", 0),
+            },
+            "order": {
+                "total": order.count(),
+                "pending": order.filter(reviewed=False).count(),
+                "noCard": order.filter(parameter="без_карты").count(),
+                "noAttestation": order.filter(parameter="без_допуска").count(),
+            },
+        })
+ 
+ 
+class WeldDecisionViewSet(viewsets.ModelViewSet):
+    """Решения по отклонениям.
+ 
+    Ставить решение может только технолог или администратор:
+    это подпись, а не заметка.
+    """
+ 
+    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
+    queryset = WeldDecision.objects.select_related(
+        "session", "session__equipment",
+        "weld", "weld__instance", "weld__instance__part", "weld__seam",
+        "run", "run__operation", "author",
+    ).prefetch_related("deviations")
+    serializer_class = WeldDecisionSerializer
+ 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+ 
+        for field in ("session", "weld", "run"):
+            value = params.get(field)
+            if value:
+                qs = qs.filter(**{f"{field}_id": value})
+ 
+        result = params.get("result")
+        if result:
+            qs = qs.filter(result=result)
+ 
+        return qs
+ 
+    def perform_create(self, serializer):
+        """Автор — тот, кто вошёл.
+ 
+        perform_create вызывается после проверки данных, но до записи.
+        Здесь подставляется то, что клиент задать не может
+        """
+        serializer.save(author=self.request.user)
+ 
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        """Как распределились принятые решения — для сводки."""
+        taken = dict(
+            self.get_queryset().values_list("result").annotate(n=Count("id"))
+        )
+        return Response({
+            "allowed": taken.get("допущено", 0),
+            "toControl": taken.get("на контроль", 0),
+            "toRework": taken.get("на переварку", 0),
+            "handled": taken.get("разобрано", 0),
+        })    
