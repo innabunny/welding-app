@@ -6,7 +6,8 @@
 # Запуск:
 #   python manage.py seed_telemetry            один закрытый сеанс
 #   python manage.py seed_telemetry --live     сеанс, который идёт сейчас
-#   python manage.py seed_telemetry --clear    стереть ранее созданное
+#   python manage.py seed_telemetry --clear    стереть ранее созданное и закрыть
+#       забытые открытые сеансы от seed_demo (без external_id)
 #   python manage.py seed_telemetry --with-card          сеанс по техпроцессу:
 #       деталь, шов, операция, выпущенная карта с проходами. Токи участков
 #       и отклонение берутся из допусков карты. Можно вместе с --live
@@ -25,6 +26,7 @@ from django.utils import timezone
 
 from apps.equipment.models import Equipment
 from apps.welders.models import Welder
+from apps.demo.cleanup import close_demo_sessions
 from apps.technology.models import Operation, Part, SeamSpec
 from apps.welding.models import (
     ArcRun,
@@ -503,3 +505,9 @@ class Command(BaseCommand):
             SeamSpec.objects.filter(part__in=parts).delete()
             parts.delete()
             self.stdout.write(f"Удалена демонстрационная деталь {SEED_PART} с картой")
+
+        # хвосты seed_demo: сеансы «на сейчас», которые так и остались
+        # открытыми. Закрываются, а не удаляются; настоящие не трогаются
+        closed = close_demo_sessions()
+        if closed:
+            self.stdout.write(f"Закрыто забытых сеансов демонстрационного наполнения: {closed}")
