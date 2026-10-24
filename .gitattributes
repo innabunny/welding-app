@@ -1,0 +1,20 @@
+# Переводы строк: в репозитории и в рабочей папке — LF, в том числе на Windows.
+# Файлы уходят в Linux-контейнеры, и CRLF ломает скрипты и конфиги
+# (sh: «\r: not found», mosquitto не читает настройки).
+* text=auto eol=lf
+
+# скрипты самой Windows — в её формате
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# двоичные — не трогать
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
