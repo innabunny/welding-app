@@ -327,7 +327,9 @@ class Collector:
         """
         touch(
             data["node"],
-            last_status_at=timezone.now(),
+            # timezone здесь — из datetime, а не из Django: у него нет now(),
+            # и раньше каждое сообщение status падало на этой строке
+            last_status_at=datetime.now(timezone.utc),
             queued=data.get("queued", 0),
             ip=data.get("ip"),
             firmware=data.get("fw"),
