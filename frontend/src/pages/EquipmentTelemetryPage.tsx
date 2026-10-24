@@ -3,10 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useEquipment } from '@/features/equipment/queries'
 import { PostStatusBadge } from '@/features/telemetry/Badges'
 import { formatStart, secondsSince } from '@/features/telemetry/format'
-import { LivePanel, type LiveTolerance } from '@/features/telemetry/LivePanel'
-import { range } from '@/features/telemetry/plan'
+import { LivePanel } from '@/features/telemetry/LivePanel'
 import { buildPosts, STALE_SESSION_SECONDS } from '@/features/telemetry/posts'
-import { useEquipmentSessions, useNodes, useSessionArcs } from '@/features/telemetry/queries'
+import { useEquipmentSessions, useNodes } from '@/features/telemetry/queries'
 import { SessionView } from '@/features/telemetry/SessionView'
 import { useNow } from '@/features/telemetry/useNow'
 import { useStationMode } from '@/features/telemetry/useStationMode'
@@ -35,13 +34,6 @@ export function EquipmentTelemetryPage() {
   const nodes = useNodes()
   const sessions = useEquipmentSessions(equipmentId)
   const socket = useTelemetrySocket(equipment.data ? (equipment.data.nodeId ?? undefined) : undefined)
-  // идущий сеанс (не забытый незакрытый) — для допуска под живыми цифрами
-  const liveSession =
-    [...(sessions.data ?? [])]
-      .sort(newestFirst)
-      .find((x) => x.finishedAt === null && (secondsSince(x.startedAt, now) ?? 0) <= STALE_SESSION_SECONDS) ?? null
-  const liveArcs = useSessionArcs(liveSession?.id ?? null, true)
-
   if (equipment.isError) return <ErrorState error={equipment.error} onRetry={() => void equipment.refetch()} />
   if (!equipment.data) return <SkeletonRows rows={5} />
   const e = equipment.data
@@ -49,17 +41,6 @@ export function EquipmentTelemetryPage() {
   const list = [...(sessions.data ?? [])].sort(newestFirst)
   // по умолчанию — идущий сеанс, а если его нет, последний закрытый
   const session = list.find((s) => s.id === chosen) ?? list.find((s) => s.finishedAt === null) ?? list[0] ?? null
-
-  // допуск для живых цифр — только у идущего сеанса: проход последнего участка дуги
-  const lastArc = liveArcs.data?.at(-1)
-  const livePass = liveSession && lastArc ? (liveSession.passPlan.find((p) => p.id === lastArc.plannedPassId) ?? null) : null
-  const tolerance: LiveTolerance | null = liveSession
-    ? liveSession.passPlan.length === 0
-      ? { passNo: null, current: null, voltage: null }
-      : livePass
-        ? { passNo: lastArc?.passNo ?? livePass.no, current: range(livePass.currentMin, livePass.currentMax), voltage: range(livePass.voltageMin, livePass.voltageMax) }
-        : null
-    : null
 
   const post = buildPosts({
     equipment: [e],
@@ -93,7 +74,7 @@ export function EquipmentTelemetryPage() {
       </div>
 
       <div className="grid gap-5 [&>*]:min-w-0">
-        {post && <LivePanel post={post} socketStatus={socket.status} now={now} large={station} tolerance={tolerance} />}
+        {post && <LivePanel post={post} socketStatus={socket.status} now={now} large={station} />}
 
         {sessions.isError ? (
           <ErrorState error={sessions.error} onRetry={() => void sessions.refetch()} />

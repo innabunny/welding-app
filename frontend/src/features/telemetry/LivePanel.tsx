@@ -1,4 +1,4 @@
-import { Flame, Unplug } from 'lucide-react'
+import { AlertOctagon, Flame, Unplug } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
 import { formatNumber } from '@/shared/lib/format'
@@ -6,42 +6,67 @@ import type { SocketStatus } from '@/shared/types/telemetry'
 import { Card } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/States'
 import { formatDuration, formatLive, formatTime } from './format'
-import type { Range } from './plan'
+import type { LiveCorridor } from './plan'
 import { isFresh, type Post } from './posts'
 import { SocketStatusLine } from './SocketStatusLine'
-
-/** Допуск прохода, на котором сейчас варят: по последнему участку дуги идущего сеанса */
-export interface LiveTolerance {
-  passNo: number | null
-  current: Range | null
-  voltage: Range | null
-}
 
 interface Props {
   post: Post
   socketStatus: SocketStatus
   now: number
   large: boolean
-  tolerance?: LiveTolerance | null
 }
 
-function Tile({ label, children, large, note }: { label: string; children: ReactNode; large: boolean; note?: ReactNode }) {
+function Tile({
+  label,
+  children,
+  large,
+  note,
+  alarm = false,
+}: {
+  label: string
+  children: ReactNode
+  large: boolean
+  note?: ReactNode
+  alarm?: boolean
+}) {
   return (
-    <div className="min-w-0 px-5 py-4 [&+&]:border-t [&+&]:border-border md:[&+&]:border-l md:[&+&]:border-t-0">
+    <div
+      className={cn(
+        'min-w-0 px-5 py-4 [&+&]:border-t [&+&]:border-border md:[&+&]:border-l md:[&+&]:border-t-0',
+        alarm && 'bg-danger-soft',
+      )}
+    >
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
-      <div className={cn('mt-1 font-heading tracking-number', large ? 'text-[88px] leading-none' : 'text-[44px] leading-tight')}>
+      <div
+        className={cn(
+          'mt-1 font-heading tracking-number',
+          large ? 'text-[88px] leading-none' : 'text-[44px] leading-tight',
+          alarm && 'text-danger',
+        )}
+      >
         {children}
       </div>
+      {alarm && (
+        <p className={cn('mt-1 flex items-center gap-1.5 font-semibold text-danger', large ? 'text-2xl' : 'text-sm')}>
+          <AlertOctagon className={large ? 'size-6' : 'size-4'} aria-hidden />
+          Вне допуска
+        </p>
+      )}
       {note && <p className={cn('mt-1 text-muted', large ? 'text-lg' : 'text-caption')}>{note}</p>}
     </div>
   )
 }
 
-/** Допуск словами под цифрой. Сравнивает человек: фронт вердикт не выносит */
-function toleranceNote(r: Range | null | undefined, unit: string, passNo: number | null | undefined): ReactNode {
-  if (r === undefined) return undefined
-  if (r === null) return 'допуска по карте нет'
-  return `допуск ${formatNumber(r[0])}–${formatNumber(r[1])} ${unit}${passNo != null ? ` · проход ${passNo}` : ''}`
+/** Допуск словами под цифрой — нужен и тогда, когда всё в порядке */
+function corridorNote(corridor: LiveCorridor | null, which: 'current' | 'voltage', unit: string): ReactNode {
+  if (corridor === null) return undefined
+  if (corridor.kind === 'uncontrolled') return 'режим не контролируется: техкарты нет'
+  const r = corridor[which]
+  if (!r) return 'допуска по карте нет'
+  const span = `${formatNumber(r[0])}–${formatNumber(r[1])} ${unit}`
+  if (corridor.kind === 'envelope') return `проход не определён · границы всех проходов ${span}`
+  return `допуск ${span} · ${corridor.passNo !== null ? `проход ${corridor.passNo}` : 'для всех проходов'}`
 }
 
 function Value({ text, unit, large }: { text: string | null; unit: string; large: boolean }) {
@@ -76,7 +101,7 @@ function Note({ post, socketStatus, now }: Omit<Props, 'large'>) {
   )
 }
 
-export function LivePanel({ post, socketStatus, now, large, tolerance }: Props) {
+export function LivePanel({ post, socketStatus, now, large }: Props) {
   if (!post.equipment.nodeId) {
     return (
       <EmptyState
@@ -91,10 +116,10 @@ export function LivePanel({ post, socketStatus, now, large, tolerance }: Props) 
   return (
     <Card>
       <div className="grid md:grid-cols-3">
-        <Tile label="Ток" large={large} note={toleranceNote(tolerance && tolerance.current, 'А', tolerance?.passNo)}>
+        <Tile label="Ток" large={large} alarm={post.iFit === 'out'} note={corridorNote(post.corridor, 'current', 'А')}>
           <Value text={formatLive(tick?.i)} unit="А" large={large} />
         </Tile>
-        <Tile label="Напряжение" large={large} note={toleranceNote(tolerance && tolerance.voltage, 'В', tolerance?.passNo)}>
+        <Tile label="Напряжение" large={large} alarm={post.uFit === 'out'} note={corridorNote(post.corridor, 'voltage', 'В')}>
           <Value text={formatLive(tick?.u)} unit="В" large={large} />
         </Tile>
         <Tile label="Дуга" large={large}>
