@@ -23,6 +23,12 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: false,
       },
+      // живые показания телеметрии: тот же бэк, но долгое соединение
+      '/ws': {
+        target: apiTarget,
+        ws: true,
+        changeOrigin: false,
+      },
     },
   },
 })

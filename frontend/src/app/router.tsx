@@ -16,6 +16,7 @@ import { PartsPage } from '@/pages/PartsPage'
 import { MaterialsPage } from '@/pages/MaterialsPage'
 import { ServicePage } from '@/pages/ServicePage'
 import { StubPage } from '@/pages/StubPage'
+import { TelemetryDebugPage } from '@/pages/TelemetryDebugPage'
 import { WeldPage } from '@/pages/WeldPage'
 import { WeldsPage } from '@/pages/WeldsPage'
 
@@ -51,6 +52,12 @@ export const router = createBrowserRouter([
         handle: { crumb: 'Паспорт шва' } satisfies RouteHandle,
       },
       stub(paths.telemetry, 'Телеметрия'),
+      // временно: проверка данных телеметрии, без оформления
+      {
+        path: `${paths.telemetry}/debug`,
+        element: <TelemetryDebugPage />,
+        handle: { crumb: 'Телеметрия: проверка данных' } satisfies RouteHandle,
+      },
       {
         path: paths.cards,
         element: <CardsPage />,
