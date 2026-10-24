@@ -112,6 +112,14 @@ services:
       CH_PASSWORD: welding
       DJANGO_SETTINGS_MODULE: config.settings
       REDIS_HOST: redis
+      # опрос узлов по HTTP: 1 — включён. Узлы и адреса — из справочника
+      # оборудования. Задаётся в .env: POLL_NODES=1
+      POLL_NODES: "${POLL_NODES:-0}"
+      # сколько без дуги держать сеанс, если карту не убрали
+      POLL_SESSION_IDLE_SECONDS: "${POLL_SESSION_IDLE_SECONDS:-600}"
+      # потоки опроса живут часами: соединение с базой держим, а не
+      # открываем на каждый запрос; мёртвое ловит проверка живости
+      DB_CONN_MAX_AGE: "300"
     volumes:
       - ./collector:/app
       # модели берём из бэкенда, чтобы не дублировать описание таблиц

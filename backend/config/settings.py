@@ -112,6 +112,12 @@ if DB_ENGINE == "postgres":
             "PASSWORD": os.environ.get("DB_PASSWORD", "welding"),
             "HOST": os.environ.get("DB_HOST", "localhost"),
             "PORT": os.environ.get("DB_PORT", "5432"),
+            # 0 — соединение на запрос, как обычно у веб-сервера. Приёмнику
+            # задаётся больше: его потоки живут часами и ходят в базу
+            # каждую секунду, переподключаться каждый раз незачем.
+            # Проверка живости ловит соединения, убитые таймаутом Postgres
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 elif DB_ENGINE == "sqlite":

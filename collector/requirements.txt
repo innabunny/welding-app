@@ -9,3 +9,5 @@ clickhouse-driver
 channels
 channels-redis
 daphne
+# опрос узлов по HTTP (poller.py)
+requests
