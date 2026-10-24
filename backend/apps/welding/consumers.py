@@ -12,12 +12,27 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 
+async def _reject_unauthorized(consumer):
+    """Закрыть соединение с кодом 4001 «пользователь не вошёл».
+
+    Сначала принять, потом закрыть. Если закрыть до accept(),
+    Channels отвечает на рукопожатие отказом HTTP 403, и браузер
+    видит только код 1006 — его не отличить от обрыва сети,
+    и панель бесконечно переподключалась бы вместо «войдите заново».
+    """
+    await consumer.accept()
+    await consumer.close(code=4001)
+
+
 class TelemetryConsumer(AsyncWebsocketConsumer):
     """Живые показания одного аппарата.
 
     Браузер подключается к /ws/telemetry/node-01/ и получает ток,
     напряжение и состояние дуги примерно раз в секунду.
     """
+
+    async def reject_unauthorized(self):
+        await _reject_unauthorized(self)
 
     async def connect(self):
         self.node = self.scope["url_route"]["kwargs"]["node"]
@@ -27,7 +42,7 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
         # что у остального API, отдельной не заводим
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
-            await self.close(code=4001)
+            await self.reject_unauthorized()
             return
 
         await self.channel_layer.group_add(self.group, self.channel_name)
@@ -65,10 +80,13 @@ class OverviewConsumer(AsyncWebsocketConsumer):
 
     GROUP = "telemetry.overview"
 
+    async def reject_unauthorized(self):
+        await _reject_unauthorized(self)
+
     async def connect(self):
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
-            await self.close(code=4001)
+            await self.reject_unauthorized()
             return
 
         await self.channel_layer.group_add(self.GROUP, self.channel_name)

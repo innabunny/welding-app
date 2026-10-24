@@ -315,6 +315,25 @@ class WeldingSessionViewSet(viewsets.ModelViewSet):
         qs = session.arcs.all().order_by("started_at")
         return Response(ArcRunSerializer(qs, many=True).data)
 
+    @action(detail=True, methods=["get"])
+    def samples(self, request, pk=None):
+        """GET /api/welding-sessions/<id>/samples/?points=2000
+
+        Точки графика на весь сеанс. Устроено так же, как у участка
+        дуги: прореживает ClickHouse, здесь только параметры.
+        """
+        session = self.get_object()
+
+        try:
+            points = int(request.query_params.get("points", 2000))
+        except ValueError:
+            points = 2000
+        points = max(50, min(points, 5000))
+
+        # замеры в ClickHouse помечены номером сеанса с узла,
+        # а не id строки в Postgres
+        return Response(read_session_samples(session.external_id, points))
+
 class RouteCodeViewSet(viewsets.ModelViewSet):
     """Коды маршрутных листов.
 
