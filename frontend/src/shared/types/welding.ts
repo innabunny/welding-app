@@ -174,4 +174,9 @@ export interface WeldingSession {
   operationNumber: string
   /** допуски по проходам из карты; пусто — сварка без техкарты, режим не контролируется */
   passPlan: PassPlan[]
+  /**
+   * проход по карте у горящего сейчас участка дуги. Обычно null:
+   * проходы участкам назначает разбор после закрытия сеанса
+   */
+  currentPlannedPassId: number | null
 }

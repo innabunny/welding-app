@@ -1,3 +1,4 @@
+import { AlertOctagon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { cn } from '@/shared/lib/cn'
 import { Table, Td, Th, Tr } from '@/shared/ui/Table'
@@ -10,7 +11,18 @@ function LiveValue({ post, value, now }: { post: Post; value: 'i' | 'u'; now: nu
   if (!post.equipment.nodeId) return <span className="text-muted">—</span>
   const text = isFresh(post.tick, now) ? formatLive(post.tick[value]) : null
   if (text === null) return <span className="whitespace-nowrap text-xs text-muted">нет данных</span>
-  return <span className="font-mono text-lg font-semibold tracking-number">{text}</span>
+  const out = (value === 'i' ? post.iFit : post.uFit) === 'out'
+  return (
+    <>
+      <span className={cn('font-mono text-lg font-semibold tracking-number', out && 'text-danger')}>{text}</span>
+      {out && (
+        <span className="flex items-center justify-end gap-1 whitespace-nowrap text-xs font-semibold text-danger">
+          <AlertOctagon className="size-3" aria-hidden />
+          вне допуска
+        </span>
+      )}
+    </>
+  )
 }
 
 function Place({ post }: { post: Post }) {
@@ -77,7 +89,7 @@ export function PostsTable({ posts, now }: { posts: Post[]; now: number }) {
       <tbody>
         {posts.map((post) => {
           const { equipment: e, session } = post
-          const alarm = post.regimePending > 0 || post.orderPending > 0
+          const alarm = post.outNow || post.regimePending > 0 || post.orderPending > 0
           return (
             <Tr
               key={e.id}

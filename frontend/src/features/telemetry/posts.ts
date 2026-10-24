@@ -6,6 +6,7 @@ import type { Deviation } from '@/shared/types/deviations'
 import type { Equipment } from '@/shared/types/equipment'
 import type { NodeState } from '@/shared/types/nodes'
 import type { WeldingSession } from '@/shared/types/welding'
+import { fit, liveCorridor, type Fit, type LiveCorridor } from './plan'
 import type { ReceivedTick } from './useTelemetrySocket'
 
 /**
@@ -47,6 +48,13 @@ export interface Post {
   regimePending: number
   /** нерассмотренные нарушения порядка по идущему сеансу */
   orderPending: number
+  /** коридор допуска для живых значений; null — сеанса нет */
+  corridor: LiveCorridor | null
+  /** попадание живых значений в коридор — только пока горит дуга */
+  iFit: Fit
+  uFit: Fit
+  /** ток или напряжение прямо сейчас вне коридора */
+  outNow: boolean
 }
 
 /** Порядок в списке: сначала то, что требует внимания или идёт сейчас */
@@ -117,6 +125,11 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
     const session = open[0] ?? null
     const tick = e.nodeId ? (ticks[e.nodeId] ?? null) : null
     const counts = session ? pendingBySession.get(session.id) : undefined
+    const corridor = session ? liveCorridor(session) : null
+    // без дуги ток около нуля — сравнивать с коридором бессмысленно
+    const live = isFresh(tick, now) && tick.arc && corridor !== null && corridor.kind !== 'uncontrolled' ? corridor : null
+    const iFit = live ? fit(tick?.i, live.current) : 'none'
+    const uFit = live ? fit(tick?.u, live.voltage) : 'none'
     return {
       equipment: e,
       node,
@@ -126,11 +139,16 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
       status: statusOf(e, node, session, tick, now),
       regimePending: counts?.regime ?? 0,
       orderPending: counts?.order ?? 0,
+      corridor,
+      iFit,
+      uFit,
+      outNow: iFit === 'out' || uFit === 'out',
     }
   })
 
   return posts.sort(
     (a, b) =>
+      Number(b.outNow) - Number(a.outNow) ||
       ORDER[a.status] - ORDER[b.status] ||
       b.regimePending + b.orderPending - (a.regimePending + a.orderPending) ||
       a.equipment.name.localeCompare(b.equipment.name, 'ru'),

@@ -19,7 +19,7 @@ import { cn } from '@/shared/lib/cn'
 import { Card } from '@/shared/ui/Card'
 import { EmptyState, ErrorState, SkeletonRows } from '@/shared/ui/States'
 
-type View = 'all' | 'working' | 'deviations' | 'offline'
+type View = 'all' | 'working' | 'out' | 'deviations' | 'offline'
 
 const VIEWS: { id: View; label: string; empty: string; emptyHint: string }[] = [
   { id: 'all', label: 'Все', empty: '', emptyHint: '' },
@@ -28,6 +28,12 @@ const VIEWS: { id: View; label: string; empty: string; emptyHint: string }[] = [
     label: 'В работе',
     empty: 'Сейчас никто не работает',
     emptyHint: 'Ни на одном аппарате нет открытого сеанса сварки.',
+  },
+  {
+    id: 'out',
+    label: 'Вне допуска сейчас',
+    empty: 'Сейчас все в допуске',
+    emptyHint: 'Ток и напряжение там, где горит дуга, в коридоре техкарты. Сварка без техкарты не сравнивается.',
   },
   {
     id: 'deviations',
@@ -46,6 +52,7 @@ const VIEWS: { id: View; label: string; empty: string; emptyHint: string }[] = [
 const MATCH: Record<View, (p: Post) => boolean> = {
   all: () => true,
   working: (p) => p.session !== null || p.status === 'arc',
+  out: (p) => p.outNow,
   deviations: (p) => p.regimePending + p.orderPending > 0,
   offline: (p) => p.status === 'offline',
 }
@@ -99,6 +106,8 @@ export function TelemetryPage() {
 
   const s = summary.data
   const working = posts.filter(MATCH.working).length
+  // подсказка в моменте: сравнение живых значений с коридором, записей не создаёт
+  const outNow = posts.filter(MATCH.out).length
 
   return (
     <>
@@ -114,6 +123,10 @@ export function TelemetryPage() {
               <dd className="font-mono text-xl font-semibold">
                 {working} <span className="text-sm font-normal text-muted">из {posts.length}</span>
               </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted">Вне допуска сейчас</dt>
+              <dd className={cn('font-mono text-xl font-semibold', outNow > 0 && 'text-danger')}>{outNow}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted">Узлов на связи</dt>
@@ -150,7 +163,7 @@ export function TelemetryPage() {
                   )}
                 >
                   {v.label}{' '}
-                  <span className={cn('font-mono', v.id === 'deviations' && count > 0 && 'text-danger')}>
+                  <span className={cn('font-mono', (v.id === 'deviations' || v.id === 'out') && count > 0 && 'text-danger')}>
                     {loading ? '' : count}
                   </span>
                 </button>
