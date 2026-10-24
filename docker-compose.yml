@@ -1,5 +1,6 @@
 services:
   db:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: welding
@@ -7,25 +8,32 @@ services:
       POSTGRES_PASSWORD: welding
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # только сам ноутбук: в цеховую сеть база с паролем welding не смотрит
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U welding"]
       interval: 5s
       retries: 5
 
   backend:
+    restart: unless-stopped
     build: ./backend
     environment:
       DB_HOST: db
       DB_NAME: welding
       DB_USER: welding
       DB_PASSWORD: welding
-      REDIS_HOST: redis 
+      REDIS_HOST: redis
+      # адрес ноутбука в цеховой сети — чтобы портал открывался с других
+      # устройств. Задаётся в файле .env рядом с этим: PORTAL_HOST=192.168.1.10
+      ALLOWED_HOSTS: "localhost,127.0.0.1,[::1],${PORTAL_HOST:-}"
     volumes:
       - ./backend:/app
+    # напрямую бэкенд нужен только на самом ноутбуке (админка);
+    # портал с других устройств идёт через 5173
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
     command: >
       sh -c "python manage.py migrate && 
@@ -37,6 +45,7 @@ services:
         condition: service_healthy  
 
   frontend:
+    restart: unless-stopped
     build: ./frontend
     environment:
       VITE_API_TARGET: http://backend:8000
@@ -51,14 +60,18 @@ services:
       - backend
 
   mqtt:
+    restart: unless-stopped
     image: eclipse-mosquitto:2
+    # узлы опрашиваются по HTTP, сами в брокер не пишут: наружу не нужен.
+    # mosquitto_pub с самого ноутбука работает через localhost
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     volumes:
       - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mqttdata:/mosquitto/data  
 
   clickhouse:
+    restart: unless-stopped
     image: clickhouse/clickhouse-server:24.8
     environment:
       CLICKHOUSE_DB: welding
@@ -71,8 +84,8 @@ services:
       # файлы отсюда выполняются один раз при первом старте
       - ./clickhouse/init:/docker-entrypoint-initdb.d
     ports:
-      - "8123:8123"   # HTTP — сюда ходит Python и DBeaver
-      - "9000:9000"   # нативный протокол
+      - "127.0.0.1:8123:8123"   # HTTP — сюда ходит Python и DBeaver
+      - "127.0.0.1:9000:9000"   # нативный протокол
     ulimits:
       # ClickHouse держит много открытых файлов, лимит по умолчанию мал
       nofile:
@@ -116,11 +129,12 @@ services:
 
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     # шина между процессами: приёмник телеметрии кладёт сообщение,
     # веб-сервер раздаёт его открытым браузерам
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
