@@ -59,3 +59,17 @@ export async function fetchCurrentShift(workshop: number | null): Promise<Curren
   const { data } = await api.get<CurrentShift>('/shift-schedules/current/', { params })
   return data
 }
+
+/** Отклонения, по которым ещё нет решения: для отметки в списке постов */
+export async function fetchPendingDeviations(): Promise<Deviation[]> {
+  const { data } = await api.get<Deviation[]>('/deviations/', { params: { pending: '1' } })
+  return data
+}
+
+/** Все сеансы аппарата: идущий и прошлые */
+export async function fetchEquipmentSessions(equipmentId: number): Promise<WeldingSession[]> {
+  const { data } = await api.get<WeldingSession[]>('/welding-sessions/', {
+    params: { equipment: String(equipmentId) },
+  })
+  return data
+}

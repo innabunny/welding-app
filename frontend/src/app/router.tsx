@@ -9,22 +9,17 @@ import { CardSheetPage } from '@/pages/CardSheetPage'
 import { CardsPage } from '@/pages/CardsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { EquipmentPage } from '@/pages/EquipmentPage'
+import { EquipmentTelemetryPage } from '@/pages/EquipmentTelemetryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PartPage } from '@/pages/PartPage'
 import { PartsPage } from '@/pages/PartsPage'
 import { MaterialsPage } from '@/pages/MaterialsPage'
 import { ServicePage } from '@/pages/ServicePage'
-import { StubPage } from '@/pages/StubPage'
 import { TelemetryDebugPage } from '@/pages/TelemetryDebugPage'
+import { TelemetryPage } from '@/pages/TelemetryPage'
 import { WeldPage } from '@/pages/WeldPage'
 import { WeldsPage } from '@/pages/WeldsPage'
-
-const stub = (path: string, crumb: string) => ({
-  path,
-  element: <StubPage title={crumb} />,
-  handle: { crumb } satisfies RouteHandle,
-})
 
 export const router = createBrowserRouter([
   { path: paths.login, element: <LoginPage /> },
@@ -51,7 +46,16 @@ export const router = createBrowserRouter([
         element: <WeldPage />,
         handle: { crumb: 'Паспорт шва' } satisfies RouteHandle,
       },
-      stub(paths.telemetry, 'Телеметрия'),
+      {
+        path: paths.telemetry,
+        element: <TelemetryPage />,
+        handle: { crumb: 'Телеметрия' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.telemetry}/equipment/:id`,
+        element: <EquipmentTelemetryPage />,
+        handle: { crumb: 'Аппарат' } satisfies RouteHandle,
+      },
       // временно: проверка данных телеметрии, без оформления
       {
         path: `${paths.telemetry}/debug`,

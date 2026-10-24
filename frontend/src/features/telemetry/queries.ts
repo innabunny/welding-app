@@ -5,6 +5,8 @@ import {
   createWeldDecision,
   fetchArcSamples,
   fetchCurrentShift,
+  fetchEquipmentSessions,
+  fetchPendingDeviations,
   fetchNodes,
   fetchNodeSummary,
   fetchSessionArcs,
@@ -25,6 +27,8 @@ export const telemetryKeys = {
     ['welding-sessions', 'samples', id, points] as const,
   arcSamples: (id: number, points: number) => ['arcs', 'samples', id, points] as const,
   sessionDeviations: (id: number) => ['deviations', { session: id }] as const,
+  pendingDeviations: ['deviations', { pending: true }] as const,
+  equipmentSessions: (id: number) => ['welding-sessions', { equipment: id }] as const,
   currentShift: (workshop: number | null) => ['shift-schedules', 'current', workshop] as const,
 }
 
@@ -69,12 +73,17 @@ export const useSessionArcs = (id: number | null) =>
     enabled: id !== null,
   })
 
-/** 2000 — столько же отдаёт сервер по умолчанию */
-export const useSessionSamples = (id: number | null, points = 2000) =>
+/**
+ * 2000 — столько же отдаёт сервер по умолчанию.
+ * live — сеанс идёт: график дорастает раз в 30 с. Пока идёт обновление,
+ * на экране остаётся прежний график того же сеанса.
+ */
+export const useSessionSamples = (id: number | null, points = 2000, live = false) =>
   useQuery({
     queryKey: telemetryKeys.sessionSamples(id ?? 0, points),
     queryFn: () => fetchSessionSamples(id ?? 0, points),
     enabled: id !== null,
+    refetchInterval: live ? SESSIONS_REFRESH : false,
   })
 
 export const useArcSamples = (id: number | null, points = 1200) =>
@@ -91,6 +100,21 @@ export const useSessionDeviations = (sessionId: number | null) =>
     queryKey: telemetryKeys.sessionDeviations(sessionId ?? 0),
     queryFn: () => fetchSessionDeviations(sessionId ?? 0),
     enabled: sessionId !== null,
+  })
+
+export const usePendingDeviations = () =>
+  useQuery({
+    queryKey: telemetryKeys.pendingDeviations,
+    queryFn: fetchPendingDeviations,
+    refetchInterval: SESSIONS_REFRESH,
+  })
+
+export const useEquipmentSessions = (equipmentId: number | null) =>
+  useQuery({
+    queryKey: telemetryKeys.equipmentSessions(equipmentId ?? 0),
+    queryFn: () => fetchEquipmentSessions(equipmentId ?? 0),
+    enabled: equipmentId !== null,
+    refetchInterval: SESSIONS_REFRESH,
   })
 
 export const useCurrentShift = (workshop: number | null) =>
