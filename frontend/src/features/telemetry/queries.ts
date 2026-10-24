@@ -7,6 +7,7 @@ import {
   fetchCurrentShift,
   fetchEquipmentSessions,
   fetchPendingDeviations,
+  fetchSessionDecisions,
   fetchNodes,
   fetchNodeSummary,
   fetchSessionArcs,
@@ -14,7 +15,8 @@ import {
   fetchSessionSamples,
   fetchWeldingSession,
 } from '@/shared/api/telemetry'
-import type { WeldDecisionDraft } from '@/shared/types/deviations'
+import type { SaveVars } from '@/shared/ui/FormModal'
+import { toDraft, type DecisionForm } from './decision'
 
 export const telemetryKeys = {
   nodes: ['nodes', 'list'] as const,
@@ -27,6 +29,7 @@ export const telemetryKeys = {
     ['welding-sessions', 'samples', id, points] as const,
   arcSamples: (id: number, points: number) => ['arcs', 'samples', id, points] as const,
   sessionDeviations: (id: number) => ['deviations', { session: id }] as const,
+  sessionDecisions: (id: number) => ['weld-decisions', { session: id }] as const,
   pendingDeviations: ['deviations', { pending: true }] as const,
   equipmentSessions: (id: number) => ['welding-sessions', { equipment: id }] as const,
   currentShift: (workshop: number | null) => ['shift-schedules', 'current', workshop] as const,
@@ -129,10 +132,19 @@ export const useCurrentShift = (workshop: number | null) =>
     refetchInterval: 60_000,
   })
 
+export const useSessionDecisions = (sessionId: number | null) =>
+  useQuery({
+    queryKey: telemetryKeys.sessionDecisions(sessionId ?? 0),
+    queryFn: () => fetchSessionDecisions(sessionId ?? 0),
+    enabled: sessionId !== null,
+  })
+
+/** Решение по отклонениям. Форма в FormModal: id всегда null — решение только создаётся */
 export function useCreateWeldDecision() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: WeldDecisionDraft) => createWeldDecision(body),
+    mutationFn: ({ body }: SaveVars<DecisionForm>) => createWeldDecision(toDraft(body)),
+    // отклонения стали «рассмотрено» — обновить и экран, и список постов
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['deviations'] }),
