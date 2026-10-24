@@ -401,6 +401,13 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
     # не контролируется
     pass_plan = serializers.SerializerMethodField()
 
+    # Проход по карте у участка дуги, который горит прямо сейчас.
+    # Обычно null даже во время сварки: проходы участкам назначает
+    # разбор после закрытия сеанса. Известен заранее, только если
+    # границу указал человек или датчик. Фронт по нему выбирает
+    # коридор допуска для подсветки живых значений
+    current_planned_pass_id = serializers.SerializerMethodField()
+
     class Meta:
         model = WeldingSession
         fields = [
@@ -413,9 +420,16 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
             "arcs_count",
             "card_id", "card_no", "part_number", "serial_no",
             "seam_number", "operation_number",
-            "pass_plan",
+            "pass_plan", "current_planned_pass_id",
         ]
         read_only_fields = ["welder_name"]
+
+    def get_current_planned_pass_id(self, obj) -> int | None:
+        # arcs уже загружены prefetch'ем вместе с pass_run — без лишних запросов
+        burning = [a for a in obj.arcs.all() if a.finished_at is None and a.pass_run is not None]
+        if not burning:
+            return None
+        return max(burning, key=lambda a: a.started_at).pass_run.planned_pass_id
 
     def get_pass_plan(self, obj) -> list:
         run = obj.operation_run
