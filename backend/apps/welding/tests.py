@@ -164,3 +164,70 @@ class PassPlanTests(TransactionTestCase):
         # горит участок с проходом
         ArcRun.objects.create(session=s, pass_run=pass_run, started_at=start + timedelta(minutes=3))
         self.assertEqual(self.api.get(url).json()["currentPlannedPassId"], self.root.id)
+
+
+# ───────────── решения по отклонениям: кто и какое может поставить ─────────────
+
+from .models import Deviation, WeldDecision  # noqa: E402
+
+
+class DecisionRulesTests(TransactionTestCase):
+    def setUp(self):
+        method = WeldingMethod.objects.create(id="tig-d", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        equipment = Equipment.objects.create(name="Аппарат", method=method)
+        now = timezone.now()
+        self.session = WeldingSession.objects.create(
+            equipment=equipment, mode="отработка", external_id="d-1", started_at=now,
+        )
+        self.regime = Deviation.objects.create(
+            session=self.session, parameter="ток", started_at=now, planned_min=90, planned_max=110, actual_value=82,
+        )
+        self.order = Deviation.objects.create(session=self.session, parameter="без_карты", started_at=now)
+
+    def client_as(self, role):
+        user = get_user_model().objects.create_user(username=f"u-{role}", password="x", role=role)
+        api = APIClient()
+        api.force_authenticate(user)
+        return api
+
+    def post(self, api, result, deviations, **extra):
+        body = {"session": self.session.id, "result": result, "deviations": [d.id for d in deviations], **extra}
+        return api.post("/api/weld-decisions/", body, format="json")
+
+    def test_technologist_decides_regime_and_deviation_becomes_reviewed(self):
+        r = self.post(self.client_as("technologist"), "допущено", [self.regime], reason="кратковременно")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.regime.refresh_from_db()
+        self.assertTrue(self.regime.reviewed)
+
+    def test_master_handles_order_violation(self):
+        r = self.post(self.client_as("master"), "разобрано", [self.order])
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_master_cannot_decide_regime(self):
+        r = self.post(self.client_as("master"), "допущено", [self.regime])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("result", r.json())
+
+    def test_result_must_match_kind(self):
+        api = self.client_as("technologist")
+        self.assertEqual(self.post(api, "разобрано", [self.regime]).status_code, 400)
+        self.assertEqual(self.post(api, "на переварку", [self.order]).status_code, 400)
+        self.assertEqual(self.post(api, "допущено", [self.regime, self.order]).status_code, 400)
+
+    def test_control_requires_kind_of_control(self):
+        api = self.client_as("technologist")
+        r = self.post(api, "на контроль", [self.regime])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("assignedControl", r.json())
+        self.assertEqual(self.post(api, "на контроль", [self.regime], assignedControl="РК").status_code, 201)
+
+    def test_inspector_cannot_sign(self):
+        self.assertEqual(self.post(self.client_as("inspector"), "разобрано", [self.order]).status_code, 403)
+
+    def test_master_cannot_edit_signed_decision(self):
+        r = self.post(self.client_as("technologist"), "допущено", [self.regime])
+        decision_id = r.json()["id"]
+        patch = self.client_as("master").patch(f"/api/weld-decisions/{decision_id}/", {"reason": "x"}, format="json")
+        self.assertEqual(patch.status_code, 403)
+        self.assertEqual(WeldDecision.objects.get(id=decision_id).reason, "")

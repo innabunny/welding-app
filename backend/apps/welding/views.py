@@ -3,7 +3,7 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsTechnologyEditor
+from apps.accounts.permissions import IsDecisionAuthor, IsTechnologyEditor
 from .samples import read_arc_samples, read_session_samples
 from datetime import date, timedelta
 
@@ -687,11 +687,12 @@ class DeviationViewSet(viewsets.ReadOnlyModelViewSet):
 class WeldDecisionViewSet(viewsets.ModelViewSet):
     """Решения по отклонениям.
  
-    Ставить решение может только технолог или администратор:
-    это подпись, а не заметка.
+    Это подпись, а не заметка. Отклонения режима решает технолог,
+    нарушения порядка разбирает мастер; кому какое решение доступно,
+    проверяет сериализатор.
     """
  
-    permission_classes = [permissions.IsAuthenticated, IsTechnologyEditor]
+    permission_classes = [permissions.IsAuthenticated, IsDecisionAuthor]
     queryset = WeldDecision.objects.select_related(
         "session", "session__equipment",
         "weld", "weld__instance", "weld__instance__part", "weld__seam",
