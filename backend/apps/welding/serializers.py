@@ -635,9 +635,37 @@ class WeldDecisionSerializer(serializers.ModelSerializer):
                     "deviations": f"Отклонения из другого сеанса: {foreign}"
                 })
  
+        # Решение должно подходить к виду отклонений. Отклонение режима
+        # допускают, отправляют на контроль или на переварку; нарушение
+        # порядка только разбирают. Смешивать виды в одном решении нельзя
+        result = attrs.get("result") or getattr(self.instance, "result", None)
+        if deviations and result:
+            organizational = {d.is_organizational for d in deviations}
+            if len(organizational) > 1:
+                raise serializers.ValidationError({
+                    "deviations": "Отклонения режима и нарушения порядка решаются отдельно"
+                })
+            is_order = organizational.pop()
+            if is_order and result != WeldDecision.Result.HANDLED:
+                raise serializers.ValidationError({
+                    "result": "Нарушение порядка можно только разобрать"
+                })
+            if not is_order and result == WeldDecision.Result.HANDLED:
+                raise serializers.ValidationError({
+                    "result": "Отклонение режима допускают, отправляют на контроль или на переварку"
+                })
+
+        # Мастер разбирает нарушения порядка, а судьбу шва по режиму
+        # решает технолог
+        request = self.context.get("request")
+        role = getattr(getattr(request, "user", None), "role", None)
+        if role == "master" and result != WeldDecision.Result.HANDLED:
+            raise serializers.ValidationError({
+                "result": "Решение по отклонению режима принимает технолог"
+            })
+
         # Вторая: «на контроль» без указания метода бессмысленно —
         # непонятно, что назначили
-        result = attrs.get("result") or getattr(self.instance, "result", None)
         control = attrs.get("assigned_control", "")
         if result == "на контроль" and not control.strip():
             raise serializers.ValidationError({
