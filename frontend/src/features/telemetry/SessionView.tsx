@@ -7,7 +7,7 @@ import { ArcsTable } from './ArcsTable'
 import { ArcChartPanel, SessionChartPanel } from './ChartPanels'
 import { DeviationBanner, DeviationList } from './DeviationList'
 import { indexPlan } from './plan'
-import { useSessionArcs, useSessionDeviations } from './queries'
+import { useSessionArcs, useSessionDecisions, useSessionDeviations } from './queries'
 import { SessionCard } from './SessionCard'
 
 interface Props {
@@ -21,6 +21,7 @@ export function SessionView({ session, now, large }: Props) {
   const open = session.finishedAt === null
   const arcs = useSessionArcs(session.id, open)
   const deviations = useSessionDeviations(session.id, open)
+  const decisions = useSessionDecisions(session.id)
   const [search, setSearch] = useSearchParams()
   const deviationsRef = useRef<HTMLDivElement>(null)
 
@@ -91,7 +92,7 @@ export function SessionView({ session, now, large }: Props) {
           ) : deviations.isError ? (
             <ErrorState error={deviations.error} onRetry={() => void deviations.refetch()} />
           ) : (
-            <DeviationList deviations={devList} session={session} />
+            <DeviationList deviations={devList} decisions={decisions.data ?? []} session={session} now={now} />
           )}
         </Panel>
       </div>

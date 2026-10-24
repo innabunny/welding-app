@@ -73,3 +73,11 @@ export async function fetchEquipmentSessions(equipmentId: number): Promise<Weldi
   })
   return data
 }
+
+/** Решения по отклонениям сеанса: кто, когда и что решил */
+export async function fetchSessionDecisions(sessionId: number): Promise<WeldDecision[]> {
+  const { data } = await api.get<WeldDecision[]>('/weld-decisions/', {
+    params: { session: String(sessionId) },
+  })
+  return data
+}

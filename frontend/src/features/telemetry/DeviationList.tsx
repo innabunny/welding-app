@@ -1,12 +1,17 @@
-import { AlertOctagon, CheckCircle2, ShieldOff } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { AlertOctagon, CheckCircle2, Gavel, ShieldOff } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { useSession } from '@/shared/api/session'
 import { cn } from '@/shared/lib/cn'
 import { formatNumber, formatRange, plural } from '@/shared/lib/format'
-import type { Deviation } from '@/shared/types/deviations'
+import type { Deviation, WeldDecision } from '@/shared/types/deviations'
 import type { WeldingSession } from '@/shared/types/welding'
+import { Button } from '@/shared/ui/Button'
+import type { Editing } from '@/shared/ui/FormModal'
 import { EmptyState } from '@/shared/ui/States'
 import { DeviationStatusBadge } from './Badges'
-import { formatDuration, formatTime } from './format'
+import { canDecide, newDecision, sameWork, WHO_DECIDES, type DecisionForm, type DeviationKind } from './decision'
+import { DecisionModal } from './DecisionModal'
+import { formatDuration, formatStart, formatTime } from './format'
 import { DEVIATION_UNIT } from './units'
 
 function Fact({ label, children, large }: { label: string; children: ReactNode; large?: boolean }) {
@@ -29,7 +34,34 @@ function where(d: Deviation): string {
   return parts.join(', ')
 }
 
-function DeviationItem({ d }: { d: Deviation }) {
+interface ItemProps {
+  d: Deviation
+  decisions: WeldDecision[]
+  /** undefined — выбирать нельзя (нет прав или уже рассмотрено) */
+  selection?: { checked: boolean; disabled: string | null; toggle: () => void }
+  now: number
+}
+
+/** Принятые решения: кто, когда, что и почему — снимок подписи */
+function Decisions({ decisions, now }: { decisions: WeldDecision[]; now: number }) {
+  if (decisions.length === 0) return null
+  return (
+    <ul className="mt-3 grid gap-1.5 border-t border-border pt-3 text-sm">
+      {decisions.map((x) => (
+        <li key={x.id}>
+          <span className="font-semibold">{x.resultName}</span>
+          {x.assignedControl && <span> · {x.assignedControl}</span>}
+          <span className="text-muted">
+            {' '}· {x.authorName || 'автор не указан'}, {formatStart(x.createdAt, now)}
+          </span>
+          {x.reason && <span className="block text-muted">{x.reason}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function DeviationItem({ d, decisions, selection, now }: ItemProps) {
   const unit = DEVIATION_UNIT[d.parameter]
   const pending = !d.reviewed
   const percent = d.deviationPercent === null ? null : Number(d.deviationPercent)
@@ -41,7 +73,19 @@ function DeviationItem({ d }: { d: Deviation }) {
       )}
     >
       <header className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {pending && <AlertOctagon className="size-5 shrink-0 text-danger" aria-hidden />}
+        {selection ? (
+          <input
+            type="checkbox"
+            aria-label={`Выбрать: ${d.parameterName}, ${formatTime(d.startedAt, true)}`}
+            title={selection.disabled ?? undefined}
+            className="size-5 shrink-0 accent-primary disabled:cursor-not-allowed"
+            checked={selection.checked}
+            disabled={selection.disabled !== null}
+            onChange={selection.toggle}
+          />
+        ) : (
+          pending && <AlertOctagon className="size-5 shrink-0 text-danger" aria-hidden />
+        )}
         <h3 className={cn('font-heading text-lg', pending && 'text-danger')}>{d.parameterName}</h3>
         <span className="text-sm text-muted">{d.severityName}</span>
         {d.passNo !== null && <span className="text-sm text-muted">проход {d.passNo}</span>}
@@ -78,22 +122,80 @@ function DeviationItem({ d }: { d: Deviation }) {
             : 'Нужна оценка технолога: допустить, направить на контроль или на переварку.'
           : 'Решение по отклонению принято.'}
       </p>
+      {selection?.disabled && <p className="mt-2 text-xs text-muted">{selection.disabled}</p>}
+      <Decisions decisions={decisions} now={now} />
     </article>
   )
 }
 
-function Group({ title, who, items }: { title: string; who: string; items: Deviation[] }) {
-  const pending = items.filter((d) => !d.reviewed).length
+interface GroupProps {
+  kind: DeviationKind
+  title: string
+  who: string
+  items: Deviation[]
+  decisionsOf: (id: number) => WeldDecision[]
+  canSign: boolean
+  selected: number[]
+  setSelected: (ids: number[]) => void
+  onDecide: () => void
+  now: number
+}
+
+function Group({ kind, title, who, items, decisionsOf, canSign, selected, setSelected, onDecide, now }: GroupProps) {
+  const pendingItems = items.filter((d) => !d.reviewed)
+  const picked = items.filter((d) => selected.includes(d.id))
+  const anchor = picked[0]
+  const toggle = (id: number) =>
+    setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  // «выбрать все» — те, что относятся к той же операции, что и первый ждущий
+  const first = anchor ?? pendingItems[0]
+  const allSameWork = first ? pendingItems.filter((d) => sameWork(d, first)).map((d) => d.id) : []
+
   return (
     <section>
-      <h3 className="mb-2 flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
-        {title} · {items.length}
-        <span className="font-normal text-muted">{who}</span>
-        {pending > 0 && <span className="text-danger">ждут решения: {pending}</span>}
-      </h3>
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h3 className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
+          {title} · {items.length}
+          <span className="font-normal text-muted">{who}</span>
+          {pendingItems.length > 0 && <span className="text-danger">ждут решения: {pendingItems.length}</span>}
+        </h3>
+        {pendingItems.length > 0 &&
+          (canSign ? (
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              {allSameWork.length > 1 && (
+                <Button variant="ghost" onClick={() => setSelected(allSameWork)}>
+                  Выбрать все ждущие
+                </Button>
+              )}
+              <Button icon={<Gavel />} disabled={picked.length === 0} onClick={onDecide}>
+                {kind === 'regime' ? 'Принять решение' : 'Отметить разобранным'}
+                {picked.length > 0 && ` · ${picked.length}`}
+              </Button>
+            </span>
+          ) : (
+            <span className="ml-auto text-caption text-muted">{WHO_DECIDES[kind]}</span>
+          ))}
+      </div>
       <div className="grid gap-3">
         {items.map((d) => (
-          <DeviationItem key={d.id} d={d} />
+          <DeviationItem
+            key={d.id}
+            d={d}
+            now={now}
+            decisions={decisionsOf(d.id)}
+            selection={
+              canSign && !d.reviewed
+                ? {
+                    checked: selected.includes(d.id),
+                    toggle: () => toggle(d.id),
+                    disabled:
+                      anchor && !selected.includes(d.id) && !sameWork(anchor, d)
+                        ? 'Другая операция или шов — по ним отдельное решение.'
+                        : null,
+                  }
+                : undefined
+            }
+          />
         ))}
       </div>
     </section>
@@ -104,7 +206,18 @@ function Group({ title, who, items }: { title: string; who: string; items: Devia
  * Два разных списка для двух разных людей: отклонения режима — технологу,
  * нарушения порядка — мастеру.
  */
-export function DeviationList({ deviations, session }: { deviations: Deviation[]; session: WeldingSession }) {
+interface ListProps {
+  deviations: Deviation[]
+  decisions: WeldDecision[]
+  session: WeldingSession
+  now: number
+}
+
+export function DeviationList({ deviations, decisions, session, now }: ListProps) {
+  const role = useSession((s) => s.user?.role)
+  const [selected, setSelected] = useState<Record<DeviationKind, number[]>>({ regime: [], order: [] })
+  const [modal, setModal] = useState<{ kind: DeviationKind; editing: Editing<DecisionForm> } | null>(null)
+
   // новые сверху, нерассмотренные раньше рассмотренных
   const sorted = [...deviations].sort(
     (a, b) => Number(a.reviewed) - Number(b.reviewed) || Date.parse(b.startedAt) - Date.parse(a.startedAt),
@@ -113,10 +226,35 @@ export function DeviationList({ deviations, session }: { deviations: Deviation[]
   const order = sorted.filter((d) => d.isOrganizational)
   const controlled = session.passPlan.length > 0
 
+  const byDeviation = new Map<number, WeldDecision[]>()
+  for (const x of decisions) for (const id of x.deviations) byDeviation.set(id, [...(byDeviation.get(id) ?? []), x])
+  const decisionsOf = (id: number) => byDeviation.get(id) ?? []
+
+  // выбранными считаются только те, что ещё ждут решения: после сохранения
+  // или чужого решения они сами выпадают из выбора
+  const pendingIds = new Set(deviations.filter((d) => !d.reviewed).map((d) => d.id))
+  const pick = (kind: DeviationKind) => selected[kind].filter((id) => pendingIds.has(id))
+  const picked = (kind: DeviationKind) => deviations.filter((d) => pick(kind).includes(d.id))
+
+  const group = (kind: DeviationKind, title: string, who: string, items: Deviation[]) => (
+    <Group
+      kind={kind}
+      title={title}
+      who={who}
+      items={items}
+      decisionsOf={decisionsOf}
+      canSign={canDecide(role, kind)}
+      selected={pick(kind)}
+      setSelected={(ids) => setSelected((prev) => ({ ...prev, [kind]: ids }))}
+      onDecide={() => setModal({ kind, editing: { id: null, initial: newDecision(session.id, kind, picked(kind)) } })}
+      now={now}
+    />
+  )
+
   return (
     <div className="grid gap-5">
       {regime.length > 0 ? (
-        <Group title="Отклонения режима" who="технологу" items={regime} />
+        group('regime', 'Отклонения режима', 'технологу', regime)
       ) : controlled ? (
         <EmptyState icon={<CheckCircle2 className="text-success" />} title="Отклонений режима нет" description="Ток, напряжение и скорость в сеансе не выходили за допуски техкарты." />
       ) : (
@@ -130,7 +268,17 @@ export function DeviationList({ deviations, session }: { deviations: Deviation[]
           }
         />
       )}
-      {order.length > 0 && <Group title="Нарушения порядка" who="мастеру" items={order} />}
+      {order.length > 0 && group('order', 'Нарушения порядка', 'мастеру', order)}
+
+      {modal && (
+        <DecisionModal
+          editing={modal.editing}
+          kind={modal.kind}
+          deviations={picked(modal.kind)}
+          onClose={() => setModal(null)}
+          onSaved={() => setSelected((prev) => ({ ...prev, [modal.kind]: [] }))}
+        />
+      )}
     </div>
   )
 }
