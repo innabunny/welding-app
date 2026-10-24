@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -63,8 +64,14 @@ class Collector:
             user=os.environ.get("CH_USER", "welding"),
             password=os.environ.get("CH_PASSWORD", "welding"),
         )
-        # накопитель точек и время последнего сброса
+        # накопитель точек и время последнего сброса. Пишут в него
+        # поток MQTT и потоки опроса узлов, сбрасывают — основной поток
+        # и поток MQTT. Поэтому два замка: короткий на сам список и
+        # отдельный на сброс — клиент ClickHouse не терпит двух
+        # одновременных запросов из разных потоков
         self.buffer: list[tuple] = []
+        self.buffer_lock = threading.Lock()
+        self.flush_lock = threading.Lock()
         self.last_flush = time.monotonic()
 
         # кэш: идентификатор участка от узла → id строки в Postgres.
@@ -92,6 +99,11 @@ class Collector:
         # а основной остаётся свободным — он сбрасывает накопитель
         client.loop_start()
         log.info("приёмник запущен")
+
+        # опрос узлов по HTTP — рядом с MQTT, включается переменной
+        if os.environ.get("POLL_NODES") == "1":
+            from poller import PollManager
+            PollManager(self).start()
 
         try:
             while True:
@@ -266,13 +278,15 @@ class Collector:
         node = data["node"]
         sid = data["sid"]
 
+        rows = []
         for index, point in enumerate(data["points"]):
             i_avg, i_min, i_max, u_avg = point
-            self.buffer.append((
+            rows.append((
                 arc_id, sid, node,
                 ms_to_dt(t0 + index * dt),
                 i_avg, i_min, i_max, u_avg,
             ))
+        self.add_rows(rows)
 
         self.flush_if_due()
 
@@ -358,33 +372,43 @@ class Collector:
 
     # ───────────────────────── накопитель ─────────────────────────
 
+    def add_rows(self, rows: list[tuple]) -> None:
+        """Положить точки в накопитель. Вызывается из любого потока."""
+        with self.buffer_lock:
+            self.buffer.extend(rows)
+
     def flush_if_due(self):
         """Сбрасываем пачку, когда накопилось достаточно или прошло время."""
-        if not self.buffer:
+        with self.buffer_lock:
+            size = len(self.buffer)
+        if not size:
             return
-        big = len(self.buffer) >= BATCH_SIZE
+        big = size >= BATCH_SIZE
         old = time.monotonic() - self.last_flush >= BATCH_SECONDS
         if big or old:
             self.flush()
 
     def flush(self):
         """Одна вставка в ClickHouse на всю пачку."""
-        if not self.buffer:
-            return
-        rows, self.buffer = self.buffer, []
-        try:
-            self.ch.execute(
-                "INSERT INTO welding.samples "
-                "(arc_id, session_id, node, at, i_avg, i_min, i_max, u_avg) VALUES",
-                rows,
-            )
-            log.info("записано точек: %s", len(rows))
-        except Exception:
-            # не теряем данные: возвращаем в накопитель и пробуем позже
-            log.exception("ошибка записи в ClickHouse, оставляю в буфере")
-            self.buffer = rows + self.buffer
-        finally:
-            self.last_flush = time.monotonic()
+        with self.flush_lock:
+            with self.buffer_lock:
+                rows, self.buffer = self.buffer, []
+            if not rows:
+                return
+            try:
+                self.ch.execute(
+                    "INSERT INTO welding.samples "
+                    "(arc_id, session_id, node, at, i_avg, i_min, i_max, u_avg) VALUES",
+                    rows,
+                )
+                log.info("записано точек: %s", len(rows))
+            except Exception:
+                # не теряем данные: возвращаем в накопитель и пробуем позже
+                log.exception("ошибка записи в ClickHouse, оставляю в буфере")
+                with self.buffer_lock:
+                    self.buffer = rows + self.buffer
+            finally:
+                self.last_flush = time.monotonic()
 
     # ──────────────────────── вспомогательное ────────────────────────
 

@@ -2,34 +2,50 @@
 #
 # Отдаёт GET /api/state в том же формате, что прошивка узла,
 # и проигрывает по кругу сценарий смены у поста:
-#   карты нет → сварщик приложил карту → дуга (корень) → пауза →
-#   дуга (заполнение, с короткой просадкой тока) → пауза → карту убрали
+#   холостой ход без карты → карту приложили → дуга полторы минуты
+#   около 150 А → пауза → дуга минута, с просадкой тока → простой
+#   с картой (проверка закрытия по простою) → карту убрали
 #
 # Запуск рядом с приёмником, в его контейнере:
-#   docker compose exec collector python node_stub.py           порт 8090
-#   docker compose exec collector python node_stub.py 8091      другой порт
+#   docker compose exec collector python node_stub.py         порт 80
+#   docker compose exec collector python node_stub.py 8091    другой порт
+# Адрес узла в справочнике для такого запуска — 127.0.0.1 (порт 80).
 # Только стандартная библиотека: ставить ничего не нужно.
 
 import json
+import math
 import random
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8090
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 80
 WELDER_UID = "0080A182"
 
-# (секунд, карта приложена, дуга, ток, напряжение)
+# (секунд, карта приложена, дуга, ток, напряжение, подпись)
 SCENARIO = [
-    (8, False, False, 0, 0),
-    (5, True, False, 0, 0),
-    (30, True, True, 100, 11.9),
-    (10, True, False, 0, 0),
-    (40, True, True, 150, 12.2),
-    (8, True, False, 0, 0),
+    (12, False, False, 0, 0, "холостой ход, карты нет"),
+    (6, True, False, 0, 0, "карту приложили"),
+    (90, True, True, 150, 12.2, "дуга, корень"),
+    (25, True, False, 0, 0, "пауза между проходами"),
+    (60, True, True, 150, 12.2, "дуга, заполнение"),
+    (45, True, False, 0, 0, "простой с картой"),
+    (10, False, False, 0, 0, "карту убрали"),
 ]
 CYCLE = sum(step[0] for step in SCENARIO)
 STARTED = time.monotonic()
+# просадка тока на втором участке: с 20-й по 23-ю секунду
+DIP_FROM, DIP_TO, DIP_CURRENT = 20, 23, 118
+
+
+def current_step():
+    t = (time.monotonic() - STARTED) % CYCLE
+    elapsed = 0.0
+    for index, step in enumerate(SCENARIO):
+        if t < elapsed + step[0]:
+            return index, step, t - elapsed
+        elapsed += step[0]
+    return len(SCENARIO) - 1, SCENARIO[-1], 0.0
 
 
 class Node:
@@ -43,25 +59,27 @@ class Node:
         self.segment = None  # [сумма I, мин I, макс I, сумма U, мин U, макс U, точек]
         self.was_arc = False
 
-    def step(self):
-        t = (time.monotonic() - STARTED) % CYCLE
-        elapsed = 0.0
-        for seconds, allowed, arc, i_base, u_base in SCENARIO:
-            if t < elapsed + seconds:
-                into = t - elapsed
-                break
-            elapsed += seconds
+    def reading(self, step, into):
+        _, _, arc, i_base, u_base, _ = step
+        if not arc:
+            return random.uniform(0, 0.4), random.uniform(0, 0.3)
+        # медленный дрейф руки сварщика и шум источника
+        a = i_base + 2.0 * math.sin(into / 7.0) + random.gauss(0, 2.5)
+        # поджиг: первые полсекунды ток растёт до рабочего
+        if into < 0.5:
+            a = 60 + (a - 60) * into / 0.5
+        if step[5] == "дуга, заполнение" and DIP_FROM <= into < DIP_TO:
+            a = DIP_CURRENT + random.gauss(0, 1.5)
+        # редкий короткий выброс — бывает при касании присадкой
+        if random.random() < 0.004:
+            a += random.choice((-1, 1)) * random.uniform(12, 20)
+        v = u_base + (a - i_base) * 0.01 + random.gauss(0, 0.15)
+        return a, v
 
-        a = v = 0.0
-        if arc:
-            a = i_base + random.uniform(-4, 4)
-            # на 15-й секунде большого участка — просадка на три секунды
-            if i_base == 150 and 15 <= into < 18:
-                a = 118 + random.uniform(-2, 2)
-            v = u_base + random.uniform(-0.3, 0.3)
-        else:
-            a = random.uniform(0, 0.4)
-            v = random.uniform(0, 0.5)
+    def step(self):
+        index, step, into = current_step()
+        _, allowed, arc, _, _, _ = step
+        a, v = self.reading(step, into)
 
         self.n += 1
         if arc:
@@ -115,5 +133,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"имитатор узла: http://0.0.0.0:{PORT}/api/state, сценарий {CYCLE} с по кругу")
+    print(f"имитатор узла: http://0.0.0.0:{PORT}/api/state, сценарий {CYCLE} с по кругу:")
+    for seconds, *_, label in SCENARIO:
+        print(f"  {seconds:>3} с  {label}")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
