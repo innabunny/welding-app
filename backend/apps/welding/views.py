@@ -276,8 +276,10 @@ class WeldingSessionViewSet(viewsets.ModelViewSet):
     """Сеансы сварки — корень телеметрии."""
 
     queryset = WeldingSession.objects.select_related(
-        "equipment", "welder", "operation_run"
-    ).prefetch_related("arcs")
+        "equipment", "welder",
+        "operation_run__card", "operation_run__operation",
+        "operation_run__weld__seam", "operation_run__weld__instance__part",
+    ).prefetch_related("arcs", "operation_run__card__passes")
     serializer_class = WeldingSessionSerializer
 
     def get_queryset(self):
@@ -312,7 +314,7 @@ class WeldingSessionViewSet(viewsets.ModelViewSet):
     def arcs(self, request, pk=None):
         """Участки дуги внутри сеанса."""
         session = self.get_object()
-        qs = session.arcs.all().order_by("started_at")
+        qs = session.arcs.select_related("pass_run").order_by("started_at")
         return Response(ArcRunSerializer(qs, many=True).data)
 
     @action(detail=True, methods=["get"])

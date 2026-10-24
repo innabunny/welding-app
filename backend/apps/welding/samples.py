@@ -14,6 +14,10 @@
 
 from .clickhouse import get_client
 
+# Границы корзин округляются через toFloat64: замеры хранятся во Float32,
+# и round() над Float32 так и остаётся Float32 — в JSON уходило бы
+# 104.30000305 вместо 104.3. avg() сам возвращает Float64, ему не нужно.
+
 # Больше точек график всё равно не покажет, а JSON распухнет
 MAX_POINTS = 2000
 
@@ -50,11 +54,11 @@ def read_arc_samples(arc_id: int, max_points: int = MAX_POINTS) -> dict:
         SELECT
             intDiv(toUnixTimestamp64Milli(at), %(step)s) * %(step)s AS bucket,
             round(avg(i_avg), 1),
-            min(i_min),
-            max(i_max),
+            round(toFloat64(min(i_min)), 1),
+            round(toFloat64(max(i_max)), 1),
             round(avg(u_avg), 2),
-            min(u_avg),
-            max(u_avg)
+            round(toFloat64(min(u_avg)), 1),
+            round(toFloat64(max(u_avg)), 1)
         FROM welding.samples
         WHERE arc_id = %(arc_id)s
         GROUP BY bucket
@@ -117,8 +121,8 @@ def read_session_samples(session_external_id: str, max_points: int = MAX_POINTS)
             intDiv(toUnixTimestamp64Milli(at), %(step)s) * %(step)s AS bucket,
             any(arc_id),
             round(avg(i_avg), 1),
-            min(i_min),
-            max(i_max),
+            round(toFloat64(min(i_min)), 1),
+            round(toFloat64(max(i_max)), 1),
             round(avg(u_avg), 2)
         FROM welding.samples
         WHERE session_id = %(sid)s

@@ -53,3 +53,99 @@ class TelemetrySocketTests(TransactionTestCase):
             {"i": 142.5, "u": 12.3, "arc": True, "sid": "test-1", "ts": 1760000000000, "node": "node-01"},
         )
         await ws.disconnect()
+
+
+# ───────────── допуски в ответе сеанса и участка дуги ─────────────
+
+from datetime import timedelta  # noqa: E402
+
+from django.utils import timezone  # noqa: E402
+from rest_framework.test import APIClient  # noqa: E402
+
+from apps.equipment.models import Equipment  # noqa: E402
+from apps.methods.models import WeldingMethod  # noqa: E402
+from apps.technology.models import Operation, Part, SeamSpec  # noqa: E402
+from apps.weldingcards.models import WeldingCard, WeldPass  # noqa: E402
+
+from .models import ArcRun, OperationRun, PartInstance, Weld, WeldingSession, WeldPassRun  # noqa: E402
+
+
+class PassPlanTests(TransactionTestCase):
+    """passPlan у сеанса, проход и длительность у участка дуги."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="plan-test", password="x")
+        self.api = APIClient()
+        self.api.force_authenticate(user)
+
+        method = WeldingMethod.objects.create(
+            id="tig-test", name="РИН", process=WeldingMethod.Process.choices[0][0],
+        )
+        self.equipment = Equipment.objects.create(name="Тестовый аппарат", method=method)
+
+        part = Part.objects.create(number="T-1", name="Тестовая деталь")
+        seam = SeamSpec.objects.create(part=part, number="1")
+        operation = Operation.objects.create(part=part, seam=seam, number="010")
+        self.card = WeldingCard.objects.create(
+            operation=operation, card_no="T-1-010", method=method, is_released=True,
+        )
+        self.root = WeldPass.objects.create(
+            card=self.card, no=1, current_min=90, current_max=110, voltage_min=10, voltage_max=12,
+        )
+        WeldPass.objects.create(card=self.card, no=2, current_min=140, current_max=160)
+
+        weld = Weld.objects.create(
+            instance=PartInstance.objects.create(part=part, serial_no="0001"), seam=seam,
+        )
+        self.run = OperationRun.objects.create(weld=weld, operation=operation, card=self.card)
+
+    def session(self, run=None):
+        now = timezone.now()
+        return WeldingSession.objects.create(
+            equipment=self.equipment,
+            mode="по техпроцессу" if run else "отработка",
+            external_id=f"t-{now.timestamp()}",
+            started_at=now - timedelta(minutes=10),
+            operation_run=run,
+        )
+
+    def test_without_card_pass_plan_is_empty(self):
+        s = self.session()
+        data = self.api.get(f"/api/welding-sessions/{s.id}/").json()
+        self.assertEqual(data["passPlan"], [])
+        self.assertIsNone(data["cardId"])
+        self.assertEqual(data["partNumber"], "")
+
+    def test_with_card_pass_plan_has_tolerances(self):
+        s = self.session(self.run)
+        data = self.api.get(f"/api/welding-sessions/{s.id}/").json()
+        self.assertEqual([p["no"] for p in data["passPlan"]], [1, 2])
+        root = data["passPlan"][0]
+        self.assertEqual((root["currentMin"], root["currentMax"]), ("90.0", "110.0"))
+        self.assertEqual((root["voltageMin"], root["voltageMax"]), ("10.0", "12.0"))
+        self.assertEqual(data["cardNo"], "T-1-010")
+        self.assertEqual(data["serialNo"], "0001")
+        self.assertEqual(data["seamNumber"], "1")
+
+    def test_arc_has_pass_and_numeric_duration(self):
+        s = self.session(self.run)
+        pass_run = WeldPassRun.objects.create(
+            run=self.run, no=1, planned_pass=self.root, match_source=WeldPassRun.MatchSource.SENSOR,
+        )
+        start = timezone.now() - timedelta(minutes=5)
+        ArcRun.objects.create(
+            session=s, pass_run=pass_run,
+            started_at=start, finished_at=start + timedelta(seconds=245, milliseconds=300),
+        )
+        ArcRun.objects.create(session=s, started_at=start + timedelta(minutes=4))
+
+        arcs = self.api.get(f"/api/welding-sessions/{s.id}/arcs/").json()
+        first, second = arcs
+        self.assertEqual(first["durationSeconds"], 245.3)
+        self.assertEqual(first["passNo"], 1)
+        self.assertEqual(first["plannedPassId"], self.root.id)
+        self.assertEqual(first["matchSource"], "датчик")
+        # дуга ещё горит и прохода нет — пустые значения, а не ошибка
+        self.assertIsNone(second["durationSeconds"])
+        self.assertIsNone(second["passNo"])
+        self.assertEqual(second["matchSource"], "")

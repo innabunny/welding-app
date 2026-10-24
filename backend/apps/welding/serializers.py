@@ -298,18 +298,65 @@ class WeldPassportSerializer(WeldSerializer):
 
 
 class ArcRunSerializer(serializers.ModelSerializer):
-    """Участок непрерывного горения дуги."""
+    """Участок непрерывного горения дуги.
 
-    duration = serializers.ReadOnlyField()
+    К какому проходу относится участок, решает разбор после сеанса.
+    Поэтому рядом с номером прохода отдаётся match_source: как
+    определена граница — датчиком, скачком тока или только расчётом
+    по времени. Это разная достоверность, пользователь должен её видеть.
+    Допуски прохода берутся из pass_plan сеанса по planned_pass_id,
+    чтобы одни и те же цифры не приходили в двух местах.
+    """
+
+    # число секунд, как durationSeconds у отклонений. С десятыми:
+    # прихватка длится доли секунды, целое число дало бы ноль
+    duration_seconds = serializers.SerializerMethodField()
+
+    pass_no = serializers.IntegerField(source="pass_run.no", read_only=True, default=None)
+    planned_pass_id = serializers.IntegerField(
+        source="pass_run.planned_pass_id", read_only=True, default=None,
+    )
+    match_source = serializers.CharField(
+        source="pass_run.match_source", read_only=True, default="",
+    )
+    match_source_display = serializers.CharField(
+        source="pass_run.get_match_source_display", read_only=True, default="",
+    )
 
     class Meta:
         model = ArcRun
         fields = [
             "id", "session", "pass_run",
-            "started_at", "finished_at", "duration",
+            "pass_no", "planned_pass_id", "match_source", "match_source_display",
+            "started_at", "finished_at", "duration_seconds",
             "current_avg", "current_min", "current_max",
             "voltage_avg", "pulse_freq",
             "telemetry_complete",
+        ]
+
+    def get_duration_seconds(self, obj) -> float | None:
+        d = obj.duration
+        return round(d.total_seconds(), 1) if d is not None else None
+
+
+class PassPlanSerializer(serializers.ModelSerializer):
+    """Проход по техкарте: допуски, с которыми сверяется телеметрия.
+
+    Числа — строками, как все DecimalField в API. Скорость — уже
+    пересчитанная в м/ч (speed_min/max), а не в единицах установки.
+    """
+
+    class Meta:
+        model = WeldPass
+        fields = [
+            "id", "no",
+            "current_min", "current_max",
+            "voltage_min", "voltage_max",
+            "speed_min", "speed_max", "speed_required",
+            "wire_speed_min", "wire_speed_max",
+            "gas_flow_min", "gas_flow_max",
+            "backing_flow_min", "backing_flow_max",
+            "pulse_current", "pause_current",
         ]
 
 
@@ -331,6 +378,29 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
     mode_display = serializers.CharField(source="get_mode_display", read_only=True)
     arcs_count = serializers.IntegerField(source="arcs.count", read_only=True)
 
+    # Что варили — только у сварки по техпроцессу. У отработки
+    # и прихватки операции нет, поля приходят пустыми
+    card_id = serializers.IntegerField(source="operation_run.card_id", read_only=True, default=None)
+    card_no = serializers.CharField(source="operation_run.card.card_no", read_only=True, default="")
+    part_number = serializers.CharField(
+        source="operation_run.weld.instance.part.number", read_only=True, default="",
+    )
+    serial_no = serializers.CharField(
+        source="operation_run.weld.instance.serial_no", read_only=True, default="",
+    )
+    seam_number = serializers.CharField(
+        source="operation_run.weld.seam.number", read_only=True, default="",
+    )
+    operation_number = serializers.CharField(
+        source="operation_run.operation.number", read_only=True, default="",
+    )
+
+    # Допуски по проходам из карты, по которой реально варили
+    # (OperationRun.card, а не текущая карта операции: её могли
+    # переиздать). Пустой список — сварка без техкарты, режим
+    # не контролируется
+    pass_plan = serializers.SerializerMethodField()
+
     class Meta:
         model = WeldingSession
         fields = [
@@ -341,8 +411,17 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
             "operation_run_id", "route_code_raw",
             "started_at", "finished_at",
             "arcs_count",
+            "card_id", "card_no", "part_number", "serial_no",
+            "seam_number", "operation_number",
+            "pass_plan",
         ]
         read_only_fields = ["welder_name"]
+
+    def get_pass_plan(self, obj) -> list:
+        run = obj.operation_run
+        if run is None or run.card_id is None:
+            return []
+        return PassPlanSerializer(run.card.passes.all(), many=True).data
 
     def validate(self, attrs):
         """Шов привязывается только к работе по техпроцессу.
