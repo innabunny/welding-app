@@ -66,11 +66,13 @@ export const useWeldingSession = (id: number | null) =>
     enabled: id !== null,
   })
 
-export const useSessionArcs = (id: number | null) =>
+/** live — сеанс идёт: новые участки появляются, обновляем раз в 30 с */
+export const useSessionArcs = (id: number | null, live = false) =>
   useQuery({
     queryKey: telemetryKeys.sessionArcs(id ?? 0),
     queryFn: () => fetchSessionArcs(id ?? 0),
     enabled: id !== null,
+    refetchInterval: live ? SESSIONS_REFRESH : false,
   })
 
 /**
@@ -86,20 +88,22 @@ export const useSessionSamples = (id: number | null, points = 2000, live = false
     refetchInterval: live ? SESSIONS_REFRESH : false,
   })
 
-export const useArcSamples = (id: number | null, points = 1200) =>
+/** live — дуга ещё горит, участок дорастает; замеры закрытого не меняются */
+export const useArcSamples = (id: number | null, points = 1200, live = false) =>
   useQuery({
     queryKey: telemetryKeys.arcSamples(id ?? 0, points),
     queryFn: () => fetchArcSamples(id ?? 0, points),
     enabled: id !== null,
-    // замеры закрытого участка не меняются
-    staleTime: Infinity,
+    staleTime: live ? 0 : Infinity,
+    refetchInterval: live ? SESSIONS_REFRESH : false,
   })
 
-export const useSessionDeviations = (sessionId: number | null) =>
+export const useSessionDeviations = (sessionId: number | null, live = false) =>
   useQuery({
     queryKey: telemetryKeys.sessionDeviations(sessionId ?? 0),
     queryFn: () => fetchSessionDeviations(sessionId ?? 0),
     enabled: sessionId !== null,
+    refetchInterval: live ? SESSIONS_REFRESH : false,
   })
 
 export const usePendingDeviations = () =>

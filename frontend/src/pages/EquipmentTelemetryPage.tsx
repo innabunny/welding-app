@@ -1,64 +1,27 @@
-import { ArrowLeft, LineChart, Monitor, MonitorOff } from 'lucide-react'
+import { ArrowLeft, Monitor, MonitorOff } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useEquipment } from '@/features/equipment/queries'
 import { PostStatusBadge } from '@/features/telemetry/Badges'
 import { formatStart, secondsSince } from '@/features/telemetry/format'
-import { LivePanel } from '@/features/telemetry/LivePanel'
+import { LivePanel, type LiveTolerance } from '@/features/telemetry/LivePanel'
+import { range } from '@/features/telemetry/plan'
 import { buildPosts, STALE_SESSION_SECONDS } from '@/features/telemetry/posts'
-import { useEquipmentSessions, useNodes, useSessionSamples } from '@/features/telemetry/queries'
-import { SessionCard } from '@/features/telemetry/SessionCard'
-import { SessionChart } from '@/features/telemetry/SessionChart'
+import { useEquipmentSessions, useNodes, useSessionArcs } from '@/features/telemetry/queries'
+import { SessionView } from '@/features/telemetry/SessionView'
 import { useNow } from '@/features/telemetry/useNow'
 import { useStationMode } from '@/features/telemetry/useStationMode'
 import { useTelemetrySocket } from '@/features/telemetry/useTelemetrySocket'
 import { paths } from '@/layouts/navigation'
 import { cn } from '@/shared/lib/cn'
-import { formatNumber } from '@/shared/lib/format'
 import type { WeldingSession } from '@/shared/types/welding'
 import { Button } from '@/shared/ui/Button'
-import { Panel } from '@/shared/ui/Card'
 import { Select } from '@/shared/ui/Form'
-import { EmptyState, ErrorState, Skeleton, SkeletonRows } from '@/shared/ui/States'
+import { EmptyState, ErrorState, SkeletonRows } from '@/shared/ui/States'
 
 /** Сколько прошлых сеансов предлагать в выборе */
 const SESSION_CHOICES = 30
 
 const newestFirst = (a: WeldingSession, b: WeldingSession) => Date.parse(b.startedAt) - Date.parse(a.startedAt)
-
-function SessionChartPanel({ session, large }: { session: WeldingSession; large: boolean }) {
-  const samples = useSessionSamples(session.id, 2000, session.finishedAt === null)
-
-  let body
-  if (samples.isPending) body = <Skeleton className="h-[440px]" />
-  else if (samples.isError) body = <ErrorState error={samples.error} onRetry={() => void samples.refetch()} />
-  else if (samples.data.total === 0)
-    body = (
-      <EmptyState
-        icon={<LineChart />}
-        title="Замеров по сеансу нет"
-        description={
-          session.finishedAt === null
-            ? 'Дуга в этом сеансе ещё не зажигалась или замеры не дошли до хранилища.'
-            : 'Узел не прислал замеры за этот сеанс. Участки дуги и отклонения могут быть, а графика не будет.'
-        }
-      />
-    )
-  else body = <SessionChart samples={samples.data} large={large} />
-
-  const d = samples.data
-  const subtitle =
-    d && d.total > 0
-      ? `${formatNumber(d.total, 0)} замеров, показано ${formatNumber(d.points.length, 0)}. ` +
-        `Линия — среднее, полоса — разброс внутри точки шириной ${formatNumber(d.stepMs / 1000, 1)} с. ` +
-        'Разрывы — паузы между участками дуги.'
-      : undefined
-
-  return (
-    <Panel title="Ток и напряжение за сеанс" subtitle={subtitle}>
-      {body}
-    </Panel>
-  )
-}
 
 export function EquipmentTelemetryPage() {
   const params = useParams()
@@ -72,6 +35,12 @@ export function EquipmentTelemetryPage() {
   const nodes = useNodes()
   const sessions = useEquipmentSessions(equipmentId)
   const socket = useTelemetrySocket(equipment.data ? (equipment.data.nodeId ?? undefined) : undefined)
+  // идущий сеанс (не забытый незакрытый) — для допуска под живыми цифрами
+  const liveSession =
+    [...(sessions.data ?? [])]
+      .sort(newestFirst)
+      .find((x) => x.finishedAt === null && (secondsSince(x.startedAt, now) ?? 0) <= STALE_SESSION_SECONDS) ?? null
+  const liveArcs = useSessionArcs(liveSession?.id ?? null, true)
 
   if (equipment.isError) return <ErrorState error={equipment.error} onRetry={() => void equipment.refetch()} />
   if (!equipment.data) return <SkeletonRows rows={5} />
@@ -80,6 +49,17 @@ export function EquipmentTelemetryPage() {
   const list = [...(sessions.data ?? [])].sort(newestFirst)
   // по умолчанию — идущий сеанс, а если его нет, последний закрытый
   const session = list.find((s) => s.id === chosen) ?? list.find((s) => s.finishedAt === null) ?? list[0] ?? null
+
+  // допуск для живых цифр — только у идущего сеанса: проход последнего участка дуги
+  const lastArc = liveArcs.data?.at(-1)
+  const livePass = liveSession && lastArc ? (liveSession.passPlan.find((p) => p.id === lastArc.plannedPassId) ?? null) : null
+  const tolerance: LiveTolerance | null = liveSession
+    ? liveSession.passPlan.length === 0
+      ? { passNo: null, current: null, voltage: null }
+      : livePass
+        ? { passNo: lastArc?.passNo ?? livePass.no, current: range(livePass.currentMin, livePass.currentMax), voltage: range(livePass.voltageMin, livePass.voltageMax) }
+        : null
+    : null
 
   const post = buildPosts({
     equipment: [e],
@@ -112,8 +92,8 @@ export function EquipmentTelemetryPage() {
         </Button>
       </div>
 
-      <div className="grid gap-5">
-        {post && <LivePanel post={post} socketStatus={socket.status} now={now} large={station} />}
+      <div className="grid gap-5 [&>*]:min-w-0">
+        {post && <LivePanel post={post} socketStatus={socket.status} now={now} large={station} tolerance={tolerance} />}
 
         {sessions.isError ? (
           <ErrorState error={sessions.error} onRetry={() => void sessions.refetch()} />
@@ -150,8 +130,7 @@ export function EquipmentTelemetryPage() {
                 </div>
               </div>
             )}
-            <SessionCard session={session} now={now} large={station} />
-            <SessionChartPanel session={session} large={station} />
+            <SessionView key={session.id} session={session} now={now} large={station} />
           </>
         )}
       </div>

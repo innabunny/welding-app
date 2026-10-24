@@ -1,29 +1,47 @@
 import { Flame, Unplug } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
+import { formatNumber } from '@/shared/lib/format'
 import type { SocketStatus } from '@/shared/types/telemetry'
 import { Card } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/States'
 import { formatDuration, formatLive, formatTime } from './format'
+import type { Range } from './plan'
 import { isFresh, type Post } from './posts'
 import { SocketStatusLine } from './SocketStatusLine'
+
+/** Допуск прохода, на котором сейчас варят: по последнему участку дуги идущего сеанса */
+export interface LiveTolerance {
+  passNo: number | null
+  current: Range | null
+  voltage: Range | null
+}
 
 interface Props {
   post: Post
   socketStatus: SocketStatus
   now: number
   large: boolean
+  tolerance?: LiveTolerance | null
 }
 
-function Tile({ label, children, large }: { label: string; children: ReactNode; large: boolean }) {
+function Tile({ label, children, large, note }: { label: string; children: ReactNode; large: boolean; note?: ReactNode }) {
   return (
     <div className="min-w-0 px-5 py-4 [&+&]:border-t [&+&]:border-border md:[&+&]:border-l md:[&+&]:border-t-0">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
       <div className={cn('mt-1 font-heading tracking-number', large ? 'text-[88px] leading-none' : 'text-[44px] leading-tight')}>
         {children}
       </div>
+      {note && <p className={cn('mt-1 text-muted', large ? 'text-lg' : 'text-caption')}>{note}</p>}
     </div>
   )
+}
+
+/** Допуск словами под цифрой. Сравнивает человек: фронт вердикт не выносит */
+function toleranceNote(r: Range | null | undefined, unit: string, passNo: number | null | undefined): ReactNode {
+  if (r === undefined) return undefined
+  if (r === null) return 'допуска по карте нет'
+  return `допуск ${formatNumber(r[0])}–${formatNumber(r[1])} ${unit}${passNo != null ? ` · проход ${passNo}` : ''}`
 }
 
 function Value({ text, unit, large }: { text: string | null; unit: string; large: boolean }) {
@@ -58,7 +76,7 @@ function Note({ post, socketStatus, now }: Omit<Props, 'large'>) {
   )
 }
 
-export function LivePanel({ post, socketStatus, now, large }: Props) {
+export function LivePanel({ post, socketStatus, now, large, tolerance }: Props) {
   if (!post.equipment.nodeId) {
     return (
       <EmptyState
@@ -73,10 +91,10 @@ export function LivePanel({ post, socketStatus, now, large }: Props) {
   return (
     <Card>
       <div className="grid md:grid-cols-3">
-        <Tile label="Ток" large={large}>
+        <Tile label="Ток" large={large} note={toleranceNote(tolerance && tolerance.current, 'А', tolerance?.passNo)}>
           <Value text={formatLive(tick?.i)} unit="А" large={large} />
         </Tile>
-        <Tile label="Напряжение" large={large}>
+        <Tile label="Напряжение" large={large} note={toleranceNote(tolerance && tolerance.voltage, 'В', tolerance?.passNo)}>
           <Value text={formatLive(tick?.u)} unit="В" large={large} />
         </Tile>
         <Tile label="Дуга" large={large}>

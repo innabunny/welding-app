@@ -3,16 +3,54 @@
 
 import type { DecimalString, IsoDateTime } from './common'
 
+/**
+ * Как определена граница прохода. Разная достоверность:
+ * вручную и датчик — надёжно, ток и пауза — подтверждено косвенно,
+ * расчёт — только по накопленному времени дуги.
+ */
+export type MatchSource = 'вручную' | 'датчик' | 'ток' | 'пауза' | 'расчёт'
+
+/**
+ * Проход по техкарте с допусками: элемент passPlan сеанса.
+ * Числа строками (DecimalField). Скорость уже в м/ч.
+ */
+export interface PassPlan {
+  id: number
+  no: number
+  currentMin: DecimalString | null
+  currentMax: DecimalString | null
+  voltageMin: DecimalString | null
+  voltageMax: DecimalString | null
+  speedMin: DecimalString | null
+  speedMax: DecimalString | null
+  speedRequired: boolean
+  wireSpeedMin: DecimalString | null
+  wireSpeedMax: DecimalString | null
+  gasFlowMin: DecimalString | null
+  gasFlowMax: DecimalString | null
+  backingFlowMin: DecimalString | null
+  backingFlowMax: DecimalString | null
+  pulseCurrent: DecimalString | null
+  pauseCurrent: DecimalString | null
+}
+
 /** Участок непрерывного горения дуги: /api/welding-sessions/<id>/arcs/ */
 export interface ArcRun {
   id: number
   session: number
   passRun: number | null
+  /** номер прохода по факту; null — проход не определён */
+  passNo: number | null
+  /** проход по карте: допуски ищутся в passPlan сеанса по этому id */
+  plannedPassId: number | null
+  /** пусто, если проход не определён */
+  matchSource: MatchSource | ''
+  matchSourceDisplay: string
   startedAt: IsoDateTime
   /** null — дуга ещё горит или конец участка не дошёл */
   finishedAt: IsoDateTime | null
-  /** длительность в секундах строкой: "360.0"; null без конца участка */
-  duration: string | null
+  /** секунды с десятыми; null без конца участка */
+  durationSeconds: number | null
   currentAvg: DecimalString | null
   currentMin: DecimalString | null
   currentMax: DecimalString | null

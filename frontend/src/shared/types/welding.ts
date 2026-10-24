@@ -1,3 +1,4 @@
+import type { PassPlan } from './telemetry'
 import type { DecimalString, IsoDate, IsoDateTime } from './common'
 
 export type WeldStatus = 'in_work' | 'done' | 'accepted' | 'rejected'
@@ -164,4 +165,13 @@ export interface WeldingSession {
   startedAt: IsoDateTime
   finishedAt: IsoDateTime | null
   arcsCount: number
+  /** что варили — только у сварки по техпроцессу, иначе пусто */
+  cardId: number | null
+  cardNo: string
+  partNumber: string
+  serialNo: string
+  seamNumber: string
+  operationNumber: string
+  /** допуски по проходам из карты; пусто — сварка без техкарты, режим не контролируется */
+  passPlan: PassPlan[]
 }

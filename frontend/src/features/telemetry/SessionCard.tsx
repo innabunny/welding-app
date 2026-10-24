@@ -38,8 +38,28 @@ export function SessionCard({ session, now, large }: { session: WeldingSession; 
           </Field>
         )}
         <Field label="Участков дуги">{session.arcsCount}</Field>
+        {session.cardId !== null && (
+          <>
+            <Field label="Деталь, зав. №">
+              {session.partNumber || '—'}
+              {session.serialNo && <span className="ml-1.5 font-mono font-normal">№ {session.serialNo}</span>}
+            </Field>
+            <Field label="Шов · операция">
+              <span className="font-mono">
+                {session.seamNumber || '—'} · {session.operationNumber || '—'}
+              </span>
+            </Field>
+            <Field label="Техкарта">{session.cardNo || '—'}</Field>
+            <Field label="Проходов по карте">{session.passPlan.length}</Field>
+          </>
+        )}
         {session.routeCodeRaw && <Field label="Код маршрутного листа">{session.routeCodeRaw}</Field>}
       </dl>
+      {session.mode === 'по техпроцессу' && session.passPlan.length === 0 && (
+        <p className="mt-3 text-caption text-warning">
+          Техкарта к сеансу не привязана или в ней нет проходов: режим не контролируется.
+        </p>
+      )}
       {stale && (
         <p className="mt-3 text-caption text-warning">
           Сеанс открыт дольше смены. Скорее всего, узел не прислал его окончание, и сеанс надо закрыть.

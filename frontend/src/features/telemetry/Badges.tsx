@@ -1,5 +1,7 @@
-import { AlertOctagon, CircleSlash, Flame, Hourglass, PlugZap, Unplug, WifiOff } from 'lucide-react'
+import { AlertOctagon, Calculator, CheckCircle2, CircleSlash, Crosshair, Flame, Hourglass, PlugZap, Unplug, WifiOff } from 'lucide-react'
 import type { ReactNode } from 'react'
+import type { Deviation } from '@/shared/types/deviations'
+import type { MatchSource } from '@/shared/types/telemetry'
 import { Badge, type BadgeTone } from '@/shared/ui/Badge'
 import type { PostStatus } from './posts'
 
@@ -46,5 +48,42 @@ export function PendingDeviations({ regime, order }: { regime: number; order: nu
         </Badge>
       )}
     </div>
+  )
+}
+
+/**
+ * Как определена граница прохода. Тон — достоверность: датчик и человек
+ * надёжны, ток и пауза — косвенное подтверждение, расчёт — только время.
+ */
+const MATCH_TONE: Record<MatchSource, BadgeTone> = {
+  'вручную': 'green',
+  'датчик': 'green',
+  'ток': 'blue',
+  'пауза': 'blue',
+  'расчёт': 'yellow',
+}
+
+export function MatchSourceBadge({ source, label }: { source: MatchSource | ''; label: string }) {
+  if (source === '') return <Badge tone="gray">проход не определён</Badge>
+  return (
+    <Badge tone={MATCH_TONE[source]} icon={source === 'расчёт' ? <Calculator /> : <Crosshair />}>
+      {label || source}
+    </Badge>
+  )
+}
+
+/** Судьба отклонения: решения ещё нет — это тревога, а не подсказка */
+export function DeviationStatusBadge({ deviation }: { deviation: Deviation }) {
+  if (deviation.reviewed) {
+    return (
+      <Badge tone="gray" icon={<CheckCircle2 />}>
+        Решение принято
+      </Badge>
+    )
+  }
+  return (
+    <Badge tone="red" icon={<AlertOctagon />}>
+      {deviation.finishedAt === null ? 'Продолжается' : 'Ждёт решения'}
+    </Badge>
   )
 }
