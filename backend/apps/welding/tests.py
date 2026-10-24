@@ -149,3 +149,18 @@ class PassPlanTests(TransactionTestCase):
         self.assertIsNone(second["durationSeconds"])
         self.assertIsNone(second["passNo"])
         self.assertEqual(second["matchSource"], "")
+
+    def test_current_planned_pass_is_pass_of_burning_arc(self):
+        s = self.session(self.run)
+        pass_run = WeldPassRun.objects.create(run=self.run, no=1, planned_pass=self.root)
+        start = timezone.now() - timedelta(minutes=5)
+        ArcRun.objects.create(session=s, pass_run=pass_run, started_at=start, finished_at=start + timedelta(minutes=1))
+        url = f"/api/welding-sessions/{s.id}/"
+        # закрытый участок — сейчас ничего не горит
+        self.assertIsNone(self.api.get(url).json()["currentPlannedPassId"])
+        # горит участок без прохода — проход ещё не определён
+        ArcRun.objects.create(session=s, started_at=start + timedelta(minutes=2))
+        self.assertIsNone(self.api.get(url).json()["currentPlannedPassId"])
+        # горит участок с проходом
+        ArcRun.objects.create(session=s, pass_run=pass_run, started_at=start + timedelta(minutes=3))
+        self.assertEqual(self.api.get(url).json()["currentPlannedPassId"], self.root.id)

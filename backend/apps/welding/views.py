@@ -279,7 +279,11 @@ class WeldingSessionViewSet(viewsets.ModelViewSet):
         "equipment", "welder",
         "operation_run__card", "operation_run__operation",
         "operation_run__weld__seam", "operation_run__weld__instance__part",
-    ).prefetch_related("arcs", "operation_run__card__passes")
+    ).prefetch_related(
+        # участки сразу с проходом: по ним считается current_planned_pass_id
+        Prefetch("arcs", queryset=ArcRun.objects.select_related("pass_run")),
+        "operation_run__card__passes",
+    )
     serializer_class = WeldingSessionSerializer
 
     def get_queryset(self):

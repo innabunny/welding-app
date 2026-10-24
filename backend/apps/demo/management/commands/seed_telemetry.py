@@ -91,8 +91,10 @@ class Command(BaseCommand):
         now = timezone.localtime()
 
         if options["live"]:
-            # начался двадцать минут назад и ещё идёт
-            started = now - timedelta(minutes=20)
+            # начался пятнадцать минут назад и ещё идёт: второй проход
+            # в этот момент горит, у участка без конца есть проход —
+            # на экране видно сравнение с коридором именно этого прохода
+            started = now - timedelta(minutes=15)
             finished = None
         else:
             # закончился час назад, длился сорок минут
