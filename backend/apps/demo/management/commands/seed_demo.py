@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.attestation.models import Attestation, AttestationItem, AttestationRule
+from apps.demo.cleanup import close_demo_sessions
 from apps.equipment.models import Equipment
 from apps.materials.models import FillerMaterial, GasFlux, Material, MaterialGroup
 from apps.service.models import ServiceRequest
@@ -166,6 +167,9 @@ class Command(BaseCommand):
             self._production(weeks)
             self._loose_sessions()
             self._service()
+            # снимок «на сейчас» стареет: открытые сеансы висели бы вечно.
+            # Живую сварку показывает seed_telemetry --live
+            close_demo_sessions(self.now)
 
         self.stdout.write(self.style.SUCCESS(self._summary()))
 
@@ -615,7 +619,7 @@ class Command(BaseCommand):
                 session=session, started_at=started, finished_at=started + timedelta(minutes=2),
                 current_avg=self.dec(self.rng.uniform(60, 160)), telemetry_complete=True,
             )
-        # открытые сеансы — «идёт сварка» на рабочем столе
+        # сеансы «только что» — закрываются в конце наполнения, см. close_demo_sessions
         for eq_id in (1, 7):
             started = self.now - timedelta(minutes=self.rng.randint(5, 40))
             session = WeldingSession.objects.create(
