@@ -109,3 +109,40 @@ class PollerLogicTests(TestCase):
         self.p.on_failure(OSError("нет ответа"))
         self.p.on_state(state(arc=False), self.at(2))
         self.assertFalse(ArcRun.objects.get().telemetry_complete)
+
+
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+class PollerOfflineTests(TestCase):
+    """Опрос сам объявляет «нет связи» через POLL_OFFLINE_SECONDS и снимает его при ответе."""
+
+    def setUp(self):
+        method = WeldingMethod.objects.create(id="tig-o", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        Equipment.objects.create(name="Аппарат", method=method, node_id="node-o", node_ip="127.0.0.1")
+        self.p = NodePoller("node-o", "127.0.0.1", FakeSink())
+
+    def test_offline_after_threshold_then_back(self):
+        from unittest import mock
+
+        from apps.welding.models import NodeOutage, NodeState
+
+        self.p.on_state(state(allowed=False), T0)
+        self.assertTrue(NodeState.objects.get(node_id="node-o").is_online)
+
+        with mock.patch.object(poller, "POLL_OFFLINE_SECONDS", 0):
+            self.p.on_failure(TimeoutError("нет ответа"))
+            self.p.on_failure(TimeoutError("нет ответа"))
+        node = NodeState.objects.get(node_id="node-o")
+        self.assertFalse(node.is_online)
+        self.assertEqual(NodeOutage.objects.filter(node=node, finished_at__isnull=True).count(), 1)
+
+        self.p.on_state(state(allowed=False), T0 + timedelta(seconds=10))
+        node.refresh_from_db()
+        self.assertTrue(node.is_online)
+        self.assertEqual(NodeOutage.objects.filter(node=node, finished_at__isnull=True).count(), 0)
+
+    def test_short_stall_is_not_offline(self):
+        from apps.welding.models import NodeState
+
+        self.p.on_state(state(allowed=False), T0)
+        self.p.on_failure(TimeoutError("нет ответа"))
+        self.assertTrue(NodeState.objects.get(node_id="node-o").is_online)

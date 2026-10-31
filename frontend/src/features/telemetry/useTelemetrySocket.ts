@@ -57,6 +57,9 @@ function parseMessage(raw: unknown): Incoming | null {
   if (data.event === 'session_stop') {
     return { kind: 'event', event: { event: 'session_stop', node: data.node, sid: str(data.sid) } }
   }
+  if (data.event === 'node_offline' || data.event === 'node_online') {
+    return { kind: 'event', event: { event: data.event, node: data.node } }
+  }
   if ('event' in data) return null
 
   return {

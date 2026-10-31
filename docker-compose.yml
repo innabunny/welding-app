@@ -117,6 +117,10 @@ services:
       POLL_NODES: "${POLL_NODES:-0}"
       # сколько без дуги держать сеанс, если карту не убрали
       POLL_SESSION_IDLE_SECONDS: "${POLL_SESSION_IDLE_SECONDS:-600}"
+      # сколько раз в секунду опрашивать узел. Задаётся в .env: POLL_HZ=2
+      POLL_HZ: "${POLL_HZ:-2}"
+      # через сколько секунд без ответа узел — «нет связи». В .env: POLL_OFFLINE_SECONDS=5
+      POLL_OFFLINE_SECONDS: "${POLL_OFFLINE_SECONDS:-5}"
       # потоки опроса живут часами: соединение с базой держим, а не
       # открываем на каждый запрос; мёртвое ловит проверка живости
       DB_CONN_MAX_AGE: "300"

@@ -35,15 +35,25 @@ from apps.equipment.models import Equipment
 from apps.welders.models import Welder
 from apps.welding.broadcast import send_event, send_live
 from apps.welding.models import ArcRun, WeldingSession
-from apps.welding.watchdog import OFFLINE_AFTER_SECONDS, touch
+from apps.welding.models import NodeState
+from apps.welding.watchdog import OFFLINE_AFTER_SECONDS, mark_offline, touch
 
 log = logging.getLogger("poller")
 
-POLL_HZ = float(os.environ.get("POLL_HZ", "5"))
+# Сколько раз в секунду опрашивать узел. Веб-сервер на ESP32 держит всего
+# несколько соединений и закрывает каждое после ответа: при пяти запросах
+# в секунду они не успевают освобождаться, и узел пропускает ответы.
+# Для фоновых значений двух раз хватает. Задаётся в .env: POLL_HZ=2
+POLL_HZ = float(os.environ.get("POLL_HZ", "2"))
 # узел в сети отвечает за десятки миллисекунд; дольше — считаем пропуском
 POLL_TIMEOUT = float(os.environ.get("POLL_TIMEOUT", "0.8"))
 # сколько без дуги держать сеанс открытым, если карту не убрали
 SESSION_IDLE_SECONDS = int(os.environ.get("POLL_SESSION_IDLE_SECONDS", "600"))
+# Через сколько секунд без ответа объявлять «нет связи». Опрос видит
+# пропажу сразу, тридцать секунд сторожа ему ждать незачем. Не меньше
+# нескольких тактов: узел иногда подвисает на пару-тройку секунд.
+# Задаётся в .env: POLL_OFFLINE_SECONDS=5
+POLL_OFFLINE_SECONDS = float(os.environ.get("POLL_OFFLINE_SECONDS", "5"))
 # узел не может сообщить режим и код маршрутного листа — режим по умолчанию
 SESSION_MODE = os.environ.get("POLL_SESSION_MODE", WeldingSession.Mode.ROUTINE)
 
@@ -78,6 +88,9 @@ class NodePoller(threading.Thread):
         # sink — приёмник: общий накопитель точек и разбор сеанса
         self.sink = sink
         self.http = requests.Session()
+        # узел отвечает с Connection: close — держать соединение незачем,
+        # а попытка переиспользовать уже закрытое кончается пропуском
+        self.http.headers["Connection"] = "close"
         self.stopping = threading.Event()
 
         self.session: WeldingSession | None = None
@@ -94,6 +107,9 @@ class NodePoller(threading.Thread):
         self.fails = 0
         self.last_ok_at: datetime | None = None
         self.last_touch = 0.0
+        # когда начались пропуски (monotonic) и объявлен ли уже обрыв
+        self.failing_since: float | None = None
+        self.reported_offline = False
 
     def stop(self):
         self.stopping.set()
@@ -138,9 +154,17 @@ class NodePoller(threading.Thread):
     def on_failure(self, exc):
         self.fails += 1
         if self.fails == 1:
+            self.failing_since = time.monotonic()
             log.warning("узел %s не ответил: %s", self.node_id, exc)
         if self.arc is not None:
             self.arc_had_gap = True
+
+        # молчит дольше порога — «нет связи» сразу, событие уйдёт в браузеры
+        if not self.reported_offline and time.monotonic() - (self.failing_since or 0) >= POLL_OFFLINE_SECONDS:
+            self.reported_offline = True
+            state = NodeState.objects.filter(node_id=self.node_id).first()
+            if state is not None:
+                mark_offline(state, self.last_ok_at or now_utc())
 
         # молчит дольше, чем сторож считает обрывом — закрываем сеанс
         # на моменте последнего ответа: что было дальше, неизвестно
@@ -153,7 +177,12 @@ class NodePoller(threading.Thread):
     def on_state(self, st: dict, at: datetime):
         if self.fails:
             log.info("узел %s снова отвечает после %s пропусков", self.node_id, self.fails)
+        if self.reported_offline:
+            # возврат отмечаем сразу: touch закроет обрыв и известит браузеры
+            self.last_touch = 0.0
         self.fails = 0
+        self.failing_since = None
+        self.reported_offline = False
         self.last_ok_at = at
 
         a = float(st.get("a") or 0)
@@ -275,8 +304,10 @@ class NodePoller(threading.Thread):
         и запуском, неизвестно. Закрываем на последнем участке дуги
         и помечаем участки неполными.
         """
+        # по оборудованию, а не по префиксу external_id: у узла «node»
+        # префикс «node-» совпал бы с сеансами узла «node-01»
         leftovers = WeldingSession.objects.filter(
-            finished_at__isnull=True, external_id__startswith=f"{self.node_id}-",
+            finished_at__isnull=True, equipment__node_id=self.node_id,
         )
         for session in leftovers:
             last = session.arcs.order_by("-started_at").first()

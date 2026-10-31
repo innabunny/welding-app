@@ -197,7 +197,7 @@ function EquipmentFormBody({ id, initial, formId, onSaved, onPendingChange }: Fo
           )}
         </Field>
 
-        <Field label="Узел телеметрии" hint="MAC или серийный номер платы" error={errors.nodeId}>
+        <Field label="Узел телеметрии" hint="Имя поста латиницей: буквы, цифры, дефис, точка — например node-01. Не MAC-адрес" error={errors.nodeId}>
           {(fid, described) => (
             <Input
               id={fid}

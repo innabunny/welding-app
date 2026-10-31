@@ -132,7 +132,13 @@ export interface SessionStopEvent {
   sid: string
 }
 
-export type TelemetryEvent = SessionStartEvent | SessionStopEvent
+/** Узел пропал или вернулся — состояние узлов надо перечитать */
+export interface NodeStatusEvent {
+  event: 'node_offline' | 'node_online'
+  node: string
+}
+
+export type TelemetryEvent = SessionStartEvent | SessionStopEvent | NodeStatusEvent
 
 /** Состояние соединения с WebSocket портала. */
 export type SocketStatus =

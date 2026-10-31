@@ -7,9 +7,72 @@
 # в общую шину (Redis), а Channels раздаёт его всем, кто подписан
 # на нужную группу. Группа здесь — один аппарат.
 
+import asyncio
 import json
+import logging
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
+
+log = logging.getLogger(__name__)
+
+# подтверждаем членство вдвое чаще срока хранения: один пропуск не страшен
+REFRESH_SECONDS = settings.CHANNEL_GROUP_EXPIRY / 2
+# на удаление из группы при закрытии — не дольше, Redis может не отвечать
+DISCARD_TIMEOUT = 2
+
+
+class LiveGroups(AsyncWebsocketConsumer):
+    """Членство в группах, которое не копит мёртвые каналы.
+
+    Группа хранит канал CHANNEL_GROUP_EXPIRY секунд (см. settings).
+    Живое соединение каждые полминуты подтверждает членство, мёртвое
+    перестаёт — и через минуту выпадает само.
+
+    Удаление из группы — в finally вокруг всей работы консьюмера, а не
+    только в disconnect(): если консьюмер упал с исключением (например,
+    таймаут Redis), disconnect() не вызывается, а finally — всегда.
+    """
+
+    _groups: tuple[str, ...] = ()
+    _refresher: asyncio.Task | None = None
+
+    async def join(self, *groups: str) -> None:
+        self._groups = groups
+        for group in groups:
+            await self.channel_layer.group_add(group, self.channel_name)
+        self._refresher = asyncio.create_task(self._refresh())
+
+    async def _refresh(self) -> None:
+        while True:
+            await asyncio.sleep(REFRESH_SECONDS)
+            for group in self._groups:
+                try:
+                    await self.channel_layer.group_add(group, self.channel_name)
+                except Exception as exc:  # noqa: BLE001 — следующая попытка через полминуты
+                    log.warning("не подтвердил членство в %s: %s", group, exc)
+
+    async def leave(self) -> None:
+        if self._refresher is not None:
+            self._refresher.cancel()
+            self._refresher = None
+        groups, self._groups = self._groups, ()
+        for group in groups:
+            try:
+                await asyncio.wait_for(
+                    self.channel_layer.group_discard(group, self.channel_name), DISCARD_TIMEOUT
+                )
+            except Exception as exc:  # noqa: BLE001 — не удалили, сам выпадет через минуту
+                log.info("не удалил канал из %s: %s", group, exc)
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self.leave()
+
+    async def disconnect(self, code):
+        await self.leave()
 
 
 async def _reject_unauthorized(consumer):
@@ -24,7 +87,7 @@ async def _reject_unauthorized(consumer):
     await consumer.close(code=4001)
 
 
-class TelemetryConsumer(AsyncWebsocketConsumer):
+class TelemetryConsumer(LiveGroups):
     """Живые показания одного аппарата.
 
     Браузер подключается к /ws/telemetry/node-01/ и получает ток,
@@ -45,14 +108,8 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
             await self.reject_unauthorized()
             return
 
-        await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.join(self.group)
         await self.accept()
-
-    async def disconnect(self, code):
-        # getattr: если отключились до входа в группу, атрибута ещё нет
-        group = getattr(self, "group", None)
-        if group:
-            await self.channel_layer.group_discard(group, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
         """Браузер ничего не присылает — панель только слушает."""
@@ -71,7 +128,7 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(event["data"]))
 
 
-class OverviewConsumer(AsyncWebsocketConsumer):
+class OverviewConsumer(LiveGroups):
     """Общая панель: все аппараты сразу.
 
     Для экрана «что сейчас происходит в цехе» — какой аппарат варит,
@@ -89,11 +146,8 @@ class OverviewConsumer(AsyncWebsocketConsumer):
             await self.reject_unauthorized()
             return
 
-        await self.channel_layer.group_add(self.GROUP, self.channel_name)
+        await self.join(self.GROUP)
         await self.accept()
-
-    async def disconnect(self, code):
-        await self.channel_layer.group_discard(self.GROUP, self.channel_name)
 
     async def telemetry_live(self, event):
         await self.send(text_data=json.dumps(event["data"]))

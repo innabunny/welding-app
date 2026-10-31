@@ -264,3 +264,118 @@ class TelemetrySummaryTests(TransactionTestCase):
         self.assertEqual(set(data["works"]["arc"]["quality"]), {
             "без отклонений", "допущено", "на контроль", "не рассмотрено", "на переварку",
         })
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class BroadcastNodeNameTests(TransactionTestCase):
+    """Плохое имя узла не роняет отправку живых значений и пишется в лог один раз."""
+
+    def test_mac_name_skipped_once(self):
+        from . import broadcast
+
+        broadcast._reported.clear()
+        with self.assertLogs("apps.welding.broadcast", level="ERROR") as logs:
+            for _ in range(5):
+                send_live("A0:B7:65:12:34:56", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(len(logs.output), 1)
+
+    def test_good_name_no_log(self):
+        from . import broadcast
+
+        broadcast._reported.clear()
+        send_live("node-01", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(broadcast._reported, set())
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class GroupMembershipTests(TransactionTestCase):
+    """Канал не остаётся в группе после закрытия — иначе группы копят мёртвые каналы."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="ws-groups", password="x")
+        self.token = Token.objects.create(user=user).key
+
+    async def test_overview_channel_leaves_group(self):
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()
+        ws = WebsocketCommunicator(application, f"/ws/telemetry/?token={self.token}")
+        connected, _ = await ws.connect()
+        self.assertTrue(connected)
+        self.assertEqual(len(layer.groups.get("telemetry.overview", {})), 1)
+        await ws.disconnect()
+        self.assertEqual(len(layer.groups.get("telemetry.overview", {})), 0)
+
+
+class BroadcastFailureTests(TransactionTestCase):
+    """Сбой шины не роняет такт опроса: ошибка в лог один раз, отправка продолжается."""
+
+    def test_failing_layer_logged_once(self):
+        from unittest import mock
+
+        from . import broadcast
+
+        class Broken:
+            async def group_send(self, group, message):
+                raise TimeoutError("Timeout reading from redis")
+
+        broadcast._send_failing = False
+        with mock.patch.object(broadcast, "get_channel_layer", return_value=Broken()):
+            with self.assertLogs("apps.welding.broadcast", level="ERROR") as logs:
+                for _ in range(5):
+                    send_live("node-01", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(len(logs.output), 1)
+        broadcast._send_failing = False
+
+
+class NodeLinkTests(TransactionTestCase):
+    """touch() сам привязывает узел к оборудованию по node_id."""
+
+    def setUp(self):
+        self.method = WeldingMethod.objects.create(id="tig-l", name="РИН", process="tig")
+
+    def test_links_existing_equipment(self):
+        from .watchdog import touch
+
+        eq = Equipment.objects.create(name="Пост 1", method=self.method, node_id="node-l1")
+        self.assertEqual(touch("node-l1").equipment_id, eq.id)
+
+    def test_unknown_node_stays_unlinked_then_links_later(self):
+        from .watchdog import touch
+
+        self.assertIsNone(touch("node-l2").equipment_id)
+        eq = Equipment.objects.create(name="Пост 2", method=self.method, node_id="node-l2")
+        self.assertEqual(touch("node-l2").equipment_id, eq.id)
+
+    def test_linked_node_does_not_look_up_again(self):
+        from .watchdog import touch
+
+        Equipment.objects.create(name="Пост 3", method=self.method, node_id="node-l3")
+        touch("node-l3")
+        # привязан: только чтение состояния и запись, без поиска оборудования
+        with self.assertNumQueries(2):
+            touch("node-l3")
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class NodeStatusEventTests(TransactionTestCase):
+    """Пропажа и возврат узла сразу уходят в браузеры событием."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="ws-node", password="x")
+        self.token = Token.objects.create(user=user).key
+
+    async def test_offline_and_online_events(self):
+        from .watchdog import mark_offline, touch
+
+        state = await sync_to_async(touch)("node-ev")
+        ws = WebsocketCommunicator(application, f"/ws/telemetry/?token={self.token}")
+        connected, _ = await ws.connect()
+        self.assertTrue(connected)
+
+        await sync_to_async(mark_offline)(state, state.last_seen_at)
+        self.assertEqual(await ws.receive_json_from(timeout=2), {"event": "node_offline", "node": "node-ev"})
+
+        await sync_to_async(touch)("node-ev")
+        self.assertEqual(await ws.receive_json_from(timeout=2), {"event": "node_online", "node": "node-ev"})
+        await ws.disconnect()
