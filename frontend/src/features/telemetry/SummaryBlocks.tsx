@@ -61,7 +61,7 @@ export function StatusBlock({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Оборудование в работе: ${active} из ${total}${offline ? `, нет связи ${offline}` : ''}`}
+        aria-label={`Оборудование: в работе ${active} из ${total}, нет связи ${offline}, вне допуска ${outNow}`}
         className="absolute inset-0 rounded-[8px]"
       />
       <span
@@ -72,36 +72,29 @@ export function StatusBlock({
         <b className="font-mono text-[22px] font-semibold text-fg">{active}</b>
         <span className="font-mono text-[14px] text-fg2">из {total}</span>
       </StatusPart>
-      {offline > 0 && (
-        <>
-          <StatusSep />
-          <button
-            type="button"
-            onClick={onOpenOffline}
-            title="Показать, кто не на связи"
-            className="relative z-10 -mx-1.5 -my-1 rounded-[6px] px-1.5 py-1 text-left hover:bg-fg/10"
-          >
-            <StatusPart caption="Нет связи" captionCls="text-muted">
-              <b className="font-mono text-[22px] font-semibold text-fg2">{offline}</b>
-            </StatusPart>
-          </button>
-        </>
-      )}
-      {outNow > 0 && (
-        <>
-          <StatusSep />
-          <button
-            type="button"
-            onClick={onOpenOut}
-            title="Открыть текущие отклонения"
-            className="relative z-10 -mx-1.5 -my-1 rounded-[6px] px-1.5 py-1 text-left hover:bg-crit/10"
-          >
-            <StatusPart caption="Вне допуска" captionCls="text-crit/80">
-              <b className="font-mono text-[22px] font-semibold text-crit">{outNow}</b>
-            </StatusPart>
-          </button>
-        </>
-      )}
+      {/* три счётчика всегда, как в референсе: ноль — тоже ответ */}
+      <StatusSep />
+      <button
+        type="button"
+        onClick={onOpenOffline}
+        title="Показать, кто не на связи"
+        className="relative z-10 -mx-1.5 -my-1 rounded-[6px] px-1.5 py-1 text-left hover:bg-fg/10"
+      >
+        <StatusPart caption="Нет связи" captionCls="text-muted">
+          <b className="font-mono text-[22px] font-semibold text-fg2">{offline}</b>
+        </StatusPart>
+      </button>
+      <StatusSep />
+      <button
+        type="button"
+        onClick={onOpenOut}
+        title="Открыть текущие отклонения"
+        className="relative z-10 -mx-1.5 -my-1 rounded-[6px] px-1.5 py-1 text-left hover:bg-crit/10"
+      >
+        <StatusPart caption="Вне допуска" captionCls={outNow > 0 ? 'text-crit/80' : 'text-muted'}>
+          <b className={cn('font-mono text-[22px] font-semibold', outNow > 0 ? 'text-crit' : 'text-fg2')}>{outNow}</b>
+        </StatusPart>
+      </button>
       <ChevronRight className="pointer-events-none ml-auto size-5 shrink-0 text-ok/70 group-hover:text-fg sm:ml-0" aria-hidden />
     </div>
   )

@@ -49,7 +49,7 @@ function range(period: Period, from: string | null, to: string | null, now: numb
 
 const isType = (v: string | null): v is EquipmentType => TYPES.includes(v as EquipmentType)
 
-/** Главная страница телеметрии — «Сварочное производство», по референсу заказчика */
+/** Главная страница телеметрии — сводка по производству, по референсу заказчика */
 export function TelemetrySummaryPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -85,8 +85,9 @@ export function TelemetrySummaryPage() {
   const socket = useTelemetrySocket(null)
 
   // зелёный блок — то же, что на странице «Оборудование в работе»
+  // те же аппараты, что в списке «Оборудование»: с узлом телеметрии
   const posts = buildPosts({
-    equipment: equipment.data ?? [],
+    equipment: (equipment.data ?? []).filter((e) => !!e.nodeId),
     nodes: nodes.data ?? [],
     sessions: sessions.data ?? [],
     ticks: socket.ticks,
@@ -98,10 +99,11 @@ export function TelemetrySummaryPage() {
   const welderName = welders.data?.find((w) => w.id === welder)?.fio
   const anyFilter = Boolean(workshop || type || equipmentId || welder)
 
-  const subtitle = [
-    period === 'shift' ? `Текущая смена, ${fmtDate(now, true)}` : `${fmtDate(from)} — ${fmtDate(to)}`,
-    [workshopName ?? 'все цеха', type && TYPE_META[type].short.toLowerCase(), equipmentName, welderName].filter(Boolean).join(' · '),
-  ].join(' · ')
+  // «Сварочное производство» уже в шапке портала — здесь период и охват
+  const heading = period === 'shift' ? `Текущая смена, ${fmtDate(now, true)}` : `${fmtDate(from)} — ${fmtDate(to)}`
+  const scope = [workshopName ?? 'все цеха', type && TYPE_META[type].short.toLowerCase(), equipmentName, welderName]
+    .filter(Boolean)
+    .join(' · ')
 
   const select = (on: boolean) =>
     cn(
@@ -118,8 +120,8 @@ export function TelemetrySummaryPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-cond text-[30px] font-semibold leading-tight text-fg sm:text-[36px]">Сварочное производство</h1>
-          <p className="tnum text-fg2">{subtitle}</p>
+          <h1 className="tnum font-cond text-[26px] font-semibold leading-tight text-fg first-letter:uppercase sm:text-[30px]">{heading}</h1>
+          <p className="text-fg2 first-letter:uppercase">{scope}</p>
         </div>
         <StatusBlock
           active={posts.filter((p) => p.session !== null).length}

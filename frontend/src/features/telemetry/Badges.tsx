@@ -1,7 +1,7 @@
 // Плашки экранов телеметрии — разметка и цвета из референса заказчика
 // (docs/telemetry-demo.html).
 
-import { CircleAlert, CircleCheck, CircleMinus, CirclePause, FileText, Spline, WifiOff, Wrench, Zap } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, CircleMinus, CirclePause, FileText, Radio, Spline, WifiOff, Wrench, Zap } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
 import type { PostStatus, Tolerance } from './posts'
@@ -74,6 +74,26 @@ export function PostStateChip({ status, size = 'md' }: { status: PostStatus; siz
     <span className={cn('label inline-flex items-center gap-2 rounded-[6px] bg-panel2 text-muted ring-1 ring-line', pad)}>
       <WifiOff className="size-4" aria-hidden />
       Нет связи
+    </span>
+  )
+}
+
+const STATE: Record<PostStatus, { label: string; cls: string; icon: ReactNode }> = {
+  arc: { label: 'Варит', cls: 'bg-arc/10 text-arc ring-arc/40', icon: <span className="arc-dot inline-block size-2 rounded-full bg-arc" /> },
+  standby: { label: 'Режим ожидания', cls: 'bg-panel2 text-fg ring-fg2/40', icon: <CirclePause /> },
+  session: { label: 'Режим ожидания', cls: 'bg-panel2 text-fg ring-fg2/40', icon: <CirclePause /> },
+  free: { label: 'На связи', cls: 'bg-ok-bg text-ok ring-ok/40', icon: <Radio /> },
+  offline: { label: 'Нет связи', cls: 'bg-panel2 text-muted ring-line', icon: <WifiOff /> },
+  'no-node': { label: 'Узел не заведён', cls: 'bg-panel2 text-muted ring-line', icon: <CircleDashed /> },
+}
+
+/** Состояние поста в строке списка: варит / ожидание / на связи / нет связи / узел не заведён */
+export function StateCell({ status }: { status: PostStatus }) {
+  const s = STATE[status]
+  return (
+    <span className={cn('label inline-flex items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2 py-1 text-xs ring-1 [&_svg]:size-3.5', s.cls)}>
+      {s.icon}
+      {s.label}
     </span>
   )
 }

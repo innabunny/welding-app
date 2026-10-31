@@ -146,6 +146,8 @@ export default {
       sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
       mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       cond: ['"IBM Plex Sans Condensed"', '"Arial Narrow"', 'system-ui', 'sans-serif'],
+      // цифры часов в шапке — как на экранах телеметрии, на всех страницах
+      'plex-mono': ['"IBM Plex Mono"', 'ui-monospace', 'Consolas', 'monospace'],
     },
     extend: {
       fontWeight: { heading: '650' },

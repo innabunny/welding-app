@@ -32,7 +32,7 @@ export type PostStatus =
   | 'free'
   /** узел не на связи */
   | 'offline'
-  /** у аппарата нет узла телеметрии */
+  /** у аппарата нет узла или от узла ещё не было ни одного сообщения */
   | 'no-node'
 
 /**
@@ -78,8 +78,8 @@ const ORDER: Record<PostStatus, number> = {
   arc: 0,
   standby: 1,
   session: 2,
-  offline: 3,
-  free: 4,
+  free: 3,
+  offline: 4,
   'no-node': 5,
 }
 
@@ -98,7 +98,11 @@ function statusOf(
   const fresh = isFresh(tick, now)
   if (fresh && tick.arc) return 'arc'
   // свежие показания — узел точно на связи, даже если список узлов ещё не обновился
-  if (!fresh && !node?.isOnline) return 'offline'
+  if (!fresh) {
+    // узел в справочнике есть, но портал от него ещё ничего не получал
+    if (node === null) return 'no-node'
+    if (!node.isOnline) return 'offline'
+  }
   if (session) return fresh ? 'standby' : 'session'
   return 'free'
 }

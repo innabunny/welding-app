@@ -12,18 +12,26 @@ import { paths } from '@/layouts/navigation'
 import { cn } from '@/shared/lib/cn'
 import { EmptyState, ErrorState, SkeletonRows } from '@/shared/ui/States'
 
-type View = 'working' | 'out' | 'offline'
+type View = 'all' | 'working' | 'out' | 'offline'
 
+// полный список — по умолчанию: «в работе» лишь одно из состояний
 const VIEWS: { id: View; label: string }[] = [
-  { id: 'working', label: 'Все в работе' },
+  { id: 'all', label: 'Все' },
+  { id: 'working', label: 'В работе' },
   { id: 'out', label: 'Вне допуска сейчас' },
   { id: 'offline', label: 'Нет связи' },
 ]
 
 const MATCH: Record<View, (p: Post) => boolean> = {
+  all: () => true,
   working: (p) => p.session !== null,
   out: (p) => p.outNow,
   offline: (p) => p.status === 'offline',
+}
+
+const EMPTY: Partial<Record<View, string>> = {
+  working: 'Сейчас никто не варит: открытых сеансов нет.',
+  out: 'Сейчас всё в допуске.',
 }
 
 const isView = (v: string | null): v is View => VIEWS.some((x) => x.id === v)
@@ -36,7 +44,7 @@ const unique = (values: string[]) => [...new Set(values.filter(Boolean))].sort((
 
 export function TelemetryPage() {
   const [params, setParams] = useSearchParams()
-  const view: View = isView(params.get('view')) ? (params.get('view') as View) : 'working'
+  const view: View = isView(params.get('view')) ? (params.get('view') as View) : 'all'
   const filter = (f: Filter) => params.get(f) ?? ''
   const setParam = (key: Filter | 'view', value: string) =>
     setParams(
@@ -49,7 +57,7 @@ export function TelemetryPage() {
       { replace: true },
     )
   const setFilter = (f: Filter, value: string) => setParam(f, value)
-  const setView = (v: View) => setParam('view', v === 'working' ? '' : v)
+  const setView = (v: View) => setParam('view', v === 'all' ? '' : v)
   const now = useNow()
 
   const socket = useTelemetrySocket(null)
@@ -75,8 +83,10 @@ export function TelemetryPage() {
       })
 
   const methodOf = (p: Post) => p.equipment.methodDesignation || p.equipment.methodName
+  // в списке — аппараты с узлом телеметрии: у остальных показывать нечего
   const posts = all.filter(
     (p) =>
+      !!p.equipment.nodeId &&
       (!filter('workshop') || p.equipment.workshopName === filter('workshop')) &&
       (!filter('method') || methodOf(p) === filter('method')) &&
       (!filter('equipment') || String(p.equipment.id) === filter('equipment')) &&
@@ -92,12 +102,12 @@ export function TelemetryPage() {
   let body
   if (failed) body = <ErrorState error={failed.error} onRetry={() => queries.forEach((q) => void q.refetch())} />
   else if (loading) body = <SkeletonRows rows={6} />
-  else if (all.length === 0)
+  else if (all.every((p) => !p.equipment.nodeId))
     body = (
       <EmptyState
         icon={<Radio />}
-        title="Оборудование не заведено"
-        description="Заведите установки в разделе «Оборудование» и укажите узел телеметрии."
+        title="Ни у одного аппарата не указан узел телеметрии"
+        description="Укажите узел у аппарата в разделе «Оборудование», например node-01."
       />
     )
   else if (view === 'offline') body = <OfflineTable posts={visible} />
@@ -109,7 +119,7 @@ export function TelemetryPage() {
         total={posts.length}
         idle={Math.max(0, posts.length - working - offline)}
         offline={offline}
-        emptyText={view === 'out' ? 'Сейчас всё в допуске.' : undefined}
+        emptyText={EMPTY[view] ?? 'По выбранному фильтру аппаратов нет.'}
         now={now}
       />
     )

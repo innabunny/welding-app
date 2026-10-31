@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { cn } from '@/shared/lib/cn'
-import { ModeChip, ToleranceCell, TypeLine } from './Badges'
+import { ModeChip, StateCell, ToleranceCell, TypeLine } from './Badges'
 import { fmt1, fmtTol, formatClock, secondsSince, shortName } from './format'
 import { fit, range, type Range } from './plan'
 import { isFresh, type Post } from './posts'
@@ -30,6 +30,19 @@ function Param({ label, avg, r, live, liveOut }: { label: string; avg: number | 
       {live !== null && (
         <span className={cn('font-mono text-xs', liveOut ? 'font-semibold text-crit' : 'text-fg2')}>сейчас {fmt1(live)}</span>
       )}
+    </div>
+  )
+}
+
+/** Живое значение без сеанса: сравнивать не с чем, только «сейчас» */
+function LiveParam({ label, live }: { label: string; live: number | null }) {
+  return (
+    <div className="flex min-w-[92px] flex-col">
+      <span className="text-xs text-muted">{label}</span>
+      <span className={cn('font-mono text-[20px] font-semibold leading-tight', live === null ? 'text-muted' : 'text-fg')}>
+        {live === null ? '—' : fmt1(live)}
+      </span>
+      <span className="font-mono text-xs text-muted">{live === null ? 'нет данных' : 'сейчас'}</span>
     </div>
   )
 }
@@ -101,6 +114,7 @@ export function ActiveTable({ posts, inWork, total, idle, offline, emptyText, no
             <thead className="bg-panel2">
               <tr>
                 <th className={TH}>Оборудование</th>
+                <th className={TH}>Состояние</th>
                 <th className={TH}>Сварщик</th>
                 <th className={TH}>Деталь · зав. №</th>
                 <th className={TH}>Шов · опер.</th>
@@ -114,10 +128,10 @@ export function ActiveTable({ posts, inWork, total, idle, offline, emptyText, no
             <tbody>
               {posts.map((post) => {
                 const { equipment: e, session: s } = post
-                if (!s) return null
                 const tick = isFresh(post.tick, now) ? post.tick : null
-                const bar = post.tolerance !== 'ok' && post.tolerance !== 'uncontrolled'
+                const bar = post.tolerance === 'out-now' || post.tolerance === 'was'
                 const open = () => navigate(equipmentPath(e.id))
+                const none = <span className="text-muted">—</span>
                 return (
                   <tr
                     key={e.id}
@@ -142,50 +156,81 @@ export function ActiveTable({ posts, inWork, total, idle, offline, emptyText, no
                             {e.name}
                           </button>
                           <TypeLine method={e.methodDesignation || e.methodName} workshop={e.workshopName} />
-                          <span className="mt-1">
-                            <ModeChip mode={s.mode} />
-                          </span>
+                          {s && (
+                            <span className="mt-1">
+                              <ModeChip mode={s.mode} />
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="text-fg" title={s.welderName}>
-                        {s.welderName ? shortName(s.welderName) : '—'}
-                      </div>
-                      {s.welderRank && <div className="text-xs text-muted">{s.welderRank} разряд</div>}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 font-mono">
-                      <div className="text-fg">{s.partNumber || 'без привязки'}</div>
-                      <div className="text-xs text-fg2">№ {s.serialNo || '—'}</div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 font-mono text-fg">
-                      {s.seamNumber || '—'} · {s.operationNumber || '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3">
-                      <Stage post={post} now={now} />
+                      <StateCell status={post.status} />
+                      <div className="mt-1 font-mono text-xs text-muted">{e.nodeId}</div>
                     </td>
                     <td className="px-3 py-3">
+                      {s ? (
+                        <>
+                          <div className="text-fg" title={s.welderName}>
+                            {s.welderName ? shortName(s.welderName) : '—'}
+                          </div>
+                          {s.welderRank && <div className="text-xs text-muted">{s.welderRank} разряд</div>}
+                        </>
+                      ) : (
+                        none
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 font-mono">
+                      {s ? (
+                        <>
+                          <div className="text-fg">{s.partNumber || 'без привязки'}</div>
+                          <div className="text-xs text-fg2">№ {s.serialNo || '—'}</div>
+                        </>
+                      ) : (
+                        none
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 font-mono text-fg">
+                      {s ? `${s.seamNumber || '—'} · ${s.operationNumber || '—'}` : none}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3">{s ? <Stage post={post} now={now} /> : none}</td>
+                    <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-x-5 gap-y-2">
-                        <Param
-                          label="I, А"
-                          avg={s.currentPass?.currentAvg ?? null}
-                          r={passRange(post, 'current')}
-                          live={tick?.i ?? null}
-                          liveOut={post.iFit === 'out'}
-                        />
-                        <Param
-                          label="U, В"
-                          avg={s.currentPass?.voltageAvg ?? null}
-                          r={passRange(post, 'voltage')}
-                          live={tick?.u ?? null}
-                          liveOut={post.uFit === 'out'}
-                        />
+                        {s ? (
+                          <>
+                            <Param
+                              label="I, А"
+                              avg={s.currentPass?.currentAvg ?? null}
+                              r={passRange(post, 'current')}
+                              live={tick?.i ?? null}
+                              liveOut={post.iFit === 'out'}
+                            />
+                            <Param
+                              label="U, В"
+                              avg={s.currentPass?.voltageAvg ?? null}
+                              r={passRange(post, 'voltage')}
+                              live={tick?.u ?? null}
+                              liveOut={post.uFit === 'out'}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <LiveParam label="I, А" live={tick?.i ?? null} />
+                            <LiveParam label="U, В" live={tick?.u ?? null} />
+                          </>
+                        )}
                       </div>
                     </td>
-                    <td className="px-3 py-3">{post.tolerance && <ToleranceCell tolerance={post.tolerance} />}</td>
+                    <td className="px-3 py-3">{post.tolerance ? <ToleranceCell tolerance={post.tolerance} /> : none}</td>
                     <td className="whitespace-nowrap px-3 py-3">
-                      <div className="font-mono text-fg">{formatClock(secondsSince(s.startedAt, now))}</div>
-                      <div className="font-mono text-xs text-muted">{String(s.id).padStart(4, '0').slice(-4)}</div>
+                      {s ? (
+                        <>
+                          <div className="font-mono text-fg">{formatClock(secondsSince(s.startedAt, now))}</div>
+                          <div className="font-mono text-xs text-muted">{String(s.id).padStart(4, '0').slice(-4)}</div>
+                        </>
+                      ) : (
+                        none
+                      )}
                     </td>
                     <td className="px-2 py-3 text-muted">
                       <ChevronRight className="size-5" aria-hidden />
