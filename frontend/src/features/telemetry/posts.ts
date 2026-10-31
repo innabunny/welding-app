@@ -35,6 +35,12 @@ export type PostStatus =
   /** у аппарата нет узла телеметрии */
   | 'no-node'
 
+/**
+ * Колонка «Допуск» списка. «Вне допуска» — живое сравнение с коридором,
+ * «было отклонение» — отклонения, которые уже зафиксировал бэкенд
+ */
+export type Tolerance = 'out-now' | 'was' | 'ok' | 'uncontrolled'
+
 export interface Post {
   equipment: Equipment
   node: NodeState | null
@@ -55,6 +61,16 @@ export interface Post {
   uFit: Fit
   /** ток или напряжение прямо сейчас вне коридора */
   outNow: boolean
+  /** null — сеанса нет */
+  tolerance: Tolerance | null
+}
+
+function toleranceOf(session: WeldingSession | null, corridor: LiveCorridor | null, outNow: boolean): Tolerance | null {
+  if (!session) return null
+  if (outNow) return 'out-now'
+  if (session.deviationsCount > 0) return 'was'
+  if (corridor === null || corridor.kind === 'uncontrolled') return 'uncontrolled'
+  return 'ok'
 }
 
 /** Порядок в списке: сначала то, что требует внимания или идёт сейчас */
@@ -130,6 +146,7 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
     const live = isFresh(tick, now) && tick.arc && corridor !== null && corridor.kind !== 'uncontrolled' ? corridor : null
     const iFit = live ? fit(tick?.i, live.current) : 'none'
     const uFit = live ? fit(tick?.u, live.voltage) : 'none'
+    const outNow = iFit === 'out' || uFit === 'out'
     return {
       equipment: e,
       node,
@@ -142,7 +159,8 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
       corridor,
       iFit,
       uFit,
-      outNow: iFit === 'out' || uFit === 'out',
+      outNow,
+      tolerance: toleranceOf(session, corridor, outNow),
     }
   })
 

@@ -18,6 +18,7 @@ import { MaterialsPage } from '@/pages/MaterialsPage'
 import { ServicePage } from '@/pages/ServicePage'
 import { TelemetryDebugPage } from '@/pages/TelemetryDebugPage'
 import { TelemetryPage } from '@/pages/TelemetryPage'
+import { TelemetrySummaryPage } from '@/pages/TelemetrySummaryPage'
 import { WeldPage } from '@/pages/WeldPage'
 import { WeldsPage } from '@/pages/WeldsPage'
 
@@ -48,8 +49,13 @@ export const router = createBrowserRouter([
       },
       {
         path: paths.telemetry,
-        element: <TelemetryPage />,
+        element: <TelemetrySummaryPage />,
         handle: { crumb: 'Телеметрия' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.telemetry}/active`,
+        element: <TelemetryPage />,
+        handle: { crumb: 'Оборудование в работе' } satisfies RouteHandle,
       },
       {
         path: `${paths.telemetry}/equipment/:id`,

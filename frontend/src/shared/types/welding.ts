@@ -179,4 +179,22 @@ export interface WeldingSession {
    * проходы участкам назначает разбор после закрытия сеанса
    */
   currentPlannedPassId: number | null
+  /** разряд из справочника сварщиков; пусто — сварщик не опознан */
+  welderRank: string
+  /** время горения дуги за сеанс, с; у горящего участка — до момента ответа */
+  arcSeconds: number
+  /** сколько отклонений нашёл разбор в сеансе, решённых и нет */
+  deviationsCount: number
+  /** последний проход, к которому отнесены участки; null — ещё ни одного */
+  currentPass: CurrentPass | null
+}
+
+/** Проход идущего сеанса и средние по нему — считает бэкенд */
+export interface CurrentPass {
+  no: number
+  /** проходов по карте; null — сварка без техкарты */
+  total: number | null
+  /** средние по участкам прохода, взвешенные по длительности */
+  currentAvg: number | null
+  voltageAvg: number | null
 }

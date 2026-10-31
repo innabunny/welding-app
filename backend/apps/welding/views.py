@@ -2,6 +2,7 @@ from django.db.models import Count, Prefetch, Q
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsDecisionAuthor, IsTechnologyEditor
 from .samples import read_arc_samples, read_session_samples
@@ -10,6 +11,7 @@ from datetime import date, timedelta
 
 from apps.equipment.models import Equipment
 
+from .summary import Filters, build_summary
 from .utilization import fleet_utilization
 
 from .models import (
@@ -283,6 +285,7 @@ class WeldingSessionViewSet(viewsets.ModelViewSet):
         # участки сразу с проходом: по ним считается current_planned_pass_id
         Prefetch("arcs", queryset=ArcRun.objects.select_related("pass_run")),
         "operation_run__card__passes",
+        "deviations",
     )
     serializer_class = WeldingSessionSerializer
 
@@ -735,3 +738,46 @@ class WeldDecisionViewSet(viewsets.ModelViewSet):
             "toRework": taken.get("на переварку", 0),
             "handled": taken.get("разобрано", 0),
         })    
+
+class TelemetrySummaryView(APIView):
+    """GET /api/telemetry-summary/?from=2026-10-01&to=2026-10-31
+
+    Сводка «Сварочное производство» для главного экрана телеметрии:
+    загрузка, отклонения, материалы, выполненные работы, итоги по типам.
+
+    Параметры:
+      from, to   — период, ГГГГ-ММ-ДД (обязательны)
+      workshop   — цех
+      type       — тип оборудования: arc / contact / ebw / diff
+      equipment  — конкретный аппарат
+      welder     — сварщик
+    """
+
+    def get(self, request):
+        params = request.query_params
+        try:
+            date_from = date.fromisoformat(params["from"])
+            date_to = date.fromisoformat(params["to"])
+        except (KeyError, ValueError):
+            return Response({"detail": "Нужны параметры from и to в виде ГГГГ-ММ-ДД"}, status=400)
+        if date_to < date_from:
+            return Response({"detail": "Конец периода раньше начала"}, status=400)
+        if (date_to - date_from) > timedelta(days=92):
+            return Response({"detail": "Период больше трёх месяцев"}, status=400)
+
+        def number(key):
+            value = params.get(key)
+            return int(value) if value and value.isdigit() else None
+
+        filters = Filters(
+            date_from=date_from,
+            date_to=date_to,
+            workshop=number("workshop"),
+            type=params.get("type") or None,
+            equipment=number("equipment"),
+            welder=number("welder"),
+        )
+        qs = Equipment.objects.filter(is_active=True).select_related(
+            "workstation", "workstation__section", "workstation__section__workshop", "method",
+        )
+        return Response(build_summary(filters, qs))

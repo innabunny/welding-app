@@ -49,6 +49,9 @@ class Utilization:
     sessions: int = 0
     arcs: int = 0
 
+    # отрезки горения дуги внутри смены — для разбивки Кз по дням
+    arc_intervals: list = field(default_factory=list, repr=False)
+
     @property
     def available_seconds(self) -> int:
         """Фонд, за который у нас есть данные."""
@@ -98,17 +101,21 @@ def equipment_utilization(
     date_to: date_cls,
     *,
     until: datetime | None = None,
+    shift: list[Interval] | None = None,
 ) -> Utilization:
     """Посчитать раскладку времени по одному аппарату.
 
     until — не считать позже этого момента. Нужно для текущего дня:
     в десять утра делить на полную смену бессмысленно, Кз выйдет
     вдвое ниже реального. Передаётся «сейчас».
-    """
-    workshop = equipment.workshop
-    workshop_id = workshop.id if workshop else None
 
-    shift = work_intervals(workshop_id, date_from, date_to)
+    shift — готовые рабочие отрезки цеха за этот период. Чтение графика
+    смен — самая долгая часть; сводка по многим аппаратам читает его
+    один раз на цех и передаёт сюда.
+    """
+    if shift is None:
+        workshop = equipment.workshop
+        shift = work_intervals(workshop.id if workshop else None, date_from, date_to)
 
     if until is not None:
         # обрезаем рабочее время по текущему моменту
@@ -189,6 +196,7 @@ def equipment_utilization(
         outside_shift_seconds=outside_sec,
         sessions=len(session_spans),
         arcs=len(arc_spans),
+        arc_intervals=arc_final,
     )
 
 

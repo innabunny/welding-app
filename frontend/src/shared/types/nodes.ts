@@ -31,6 +31,8 @@ export interface NodeState {
   /** строка, потому что DecimalField */
   temperature: string | null;
   resetReason: ResetReason;
+  /** последний сеанс на аппарате узла; имя — снимок из сеанса */
+  lastSession: { welderName: string; startedAt: string } | null;
 }
 
 export type OutageKind = 'нет связи' | 'без питания' | 'перезапуск';

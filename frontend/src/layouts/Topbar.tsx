@@ -1,7 +1,10 @@
 import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react'
-import { useMatches } from 'react-router'
+import { useLocation, useMatches } from 'react-router'
+import { fmtDate } from '@/features/telemetry/format'
+import { useNow } from '@/features/telemetry/useNow'
 import { useTheme } from '@/shared/lib/theme'
 import { IconButton } from '@/shared/ui/Button'
+import { paths } from './navigation'
 import { SIDEBAR_ID } from './Sidebar'
 import { useSidebar } from './sidebarStore'
 
@@ -19,7 +22,30 @@ function useCrumb(): string {
   return last && isRouteHandle(last.handle) ? last.handle.crumb : ''
 }
 
+/** Часовой пояс браузера: «МСК» для Москвы, иначе «UTC+5» */
+function zoneLabel(at: number): string {
+  const hours = -new Date(at).getTimezoneOffset() / 60
+  if (hours === 3) return 'МСК'
+  return `UTC${hours >= 0 ? '+' : '−'}${Math.abs(hours)}`
+}
+
+/** Часы в шапке телеметрии — как в референсе: «13:31:14 МСК · пт, 16.10.2026» */
+function Clock() {
+  const now = useNow()
+  return (
+    <span className="hidden items-baseline gap-2 sm:flex">
+      <span className="tnum font-mono text-[18px] text-text">
+        {new Date(now).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </span>
+      <span className="tnum font-mono text-[14px] text-muted">
+        {zoneLabel(now)} · {fmtDate(now)}
+      </span>
+    </span>
+  )
+}
+
 export function Topbar() {
+  const telemetry = useLocation().pathname.startsWith(paths.telemetry)
   const crumb = useCrumb()
   const { theme, toggle } = useTheme()
   const dark = theme === 'dark'
@@ -37,11 +63,17 @@ export function Topbar() {
         >
           {sidebarHidden ? <PanelLeftOpen strokeWidth={1.8} /> : <PanelLeftClose strokeWidth={1.8} />}
         </IconButton>
-        <nav aria-label="Хлебные крошки" className="truncate text-sm text-muted">
-          Портал / <strong className="font-semibold text-text">{crumb}</strong>
-        </nav>
+        {telemetry ? (
+          <span className="label truncate text-[20px] text-text">Сварочное производство</span>
+        ) : (
+          <nav aria-label="Хлебные крошки" className="truncate text-sm text-muted">
+            Портал / <strong className="font-semibold text-text">{crumb}</strong>
+          </nav>
+        )}
       </div>
-      <button
+      <div className="flex shrink-0 items-center gap-4">
+        {telemetry && <Clock />}
+        <button
         type="button"
         onClick={toggle}
         aria-label={dark ? 'Включить светлую тему' : 'Включить тёмную тему'}
@@ -49,7 +81,8 @@ export function Topbar() {
       >
         {dark ? <Moon className="size-4" strokeWidth={1.8} /> : <Sun className="size-4" strokeWidth={1.8} />}
         {dark ? 'Тёмная' : 'Светлая'}
-      </button>
+        </button>
+      </div>
     </header>
   )
 }

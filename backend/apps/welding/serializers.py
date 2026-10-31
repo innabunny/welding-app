@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.equipment.models import Equipment
@@ -408,6 +409,23 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
     # коридор допуска для подсветки живых значений
     current_planned_pass_id = serializers.SerializerMethodField()
 
+    # Разряд берётся из справочника сварщиков, а не снимком: нужен
+    # списку «Оборудование в работе», то есть про идущий сеанс
+    welder_rank = serializers.CharField(source="welder.rank", read_only=True, default="")
+
+    # Суммарное время горения дуги за сеанс, секунды. У горящего
+    # участка считается до момента ответа
+    arc_seconds = serializers.SerializerMethodField()
+
+    # Сколько отклонений нашёл разбор в этом сеансе — для пометки
+    # «было отклонение». Решены они или нет, здесь не важно
+    deviations_count = serializers.IntegerField(source="deviations.count", read_only=True)
+
+    # Последний проход, к которому отнесены участки дуги, и средние
+    # ток и напряжение по нему, взвешенные по длительности участков.
+    # null — ни один участок ещё не отнесён к проходу
+    current_pass = serializers.SerializerMethodField()
+
     class Meta:
         model = WeldingSession
         fields = [
@@ -421,8 +439,45 @@ class WeldingSessionSerializer(serializers.ModelSerializer):
             "card_id", "card_no", "part_number", "serial_no",
             "seam_number", "operation_number",
             "pass_plan", "current_planned_pass_id",
+            "welder_rank", "arc_seconds", "deviations_count", "current_pass",
         ]
         read_only_fields = ["welder_name"]
+
+    @staticmethod
+    def _arc_seconds(arc, now) -> float:
+        end = arc.finished_at or now
+        return max(0.0, (end - arc.started_at).total_seconds())
+
+    def get_arc_seconds(self, obj) -> int:
+        now = timezone.now()
+        return round(sum(self._arc_seconds(a, now) for a in obj.arcs.all()))
+
+    def get_current_pass(self, obj) -> dict | None:
+        assigned = [a for a in obj.arcs.all() if a.pass_run is not None]
+        if not assigned:
+            return None
+        pass_run = max(assigned, key=lambda a: a.started_at).pass_run
+        now = timezone.now()
+
+        def weighted(field):
+            total = weight = 0.0
+            for a in assigned:
+                value = getattr(a, field)
+                if a.pass_run_id != pass_run.id or value is None:
+                    continue
+                w = self._arc_seconds(a, now)
+                total += float(value) * w
+                weight += w
+            return round(total / weight, 1) if weight else None
+
+        run = obj.operation_run
+        planned = len(run.card.passes.all()) if run is not None and run.card_id is not None else None
+        return {
+            "no": pass_run.no,
+            "total": planned,
+            "current_avg": weighted("current_avg"),
+            "voltage_avg": weighted("voltage_avg"),
+        }
 
     def get_current_planned_pass_id(self, obj) -> int | None:
         # arcs уже загружены prefetch'ем вместе с pass_run — без лишних запросов
@@ -493,6 +548,9 @@ class NodeStateSerializer(serializers.ModelSerializer):
     # сколько секунд назад было последнее сообщение — фронту так
     # удобнее, чем вычитать даты и ловить разницу часовых поясов
     silent_seconds = serializers.SerializerMethodField()
+    # Кто последним работал на аппарате и когда начал — для списка
+    # узлов без связи. Имя — снимок из сеанса, не из справочника
+    last_session = serializers.SerializerMethodField()
 
     class Meta:
         model = NodeState
@@ -500,8 +558,16 @@ class NodeStateSerializer(serializers.ModelSerializer):
             "id", "node_id", "equipment", "equipment_name", "workshop_name",
             "is_online", "last_seen_at", "last_status_at", "silent_seconds",
             "queued", "ip", "firmware", "uptime_seconds", "free_bytes",
-            "temperature", "reset_reason",
+            "temperature", "reset_reason", "last_session",
         ]
+
+    def get_last_session(self, obj) -> dict | None:
+        if obj.equipment_id is None:
+            return None
+        last = obj.equipment.sessions.order_by("-started_at").only("welder_name", "started_at").first()
+        if last is None:
+            return None
+        return {"welder_name": last.welder_name, "started_at": last.started_at}
 
     def get_silent_seconds(self, obj) -> int | None:
         if obj.last_seen_at is None:
@@ -562,6 +628,10 @@ class DeviationSerializer(serializers.ModelSerializer):
     )
  
     duration_seconds = serializers.SerializerMethodField()
+    # куда и на сколько вышли за допуск, в единицах параметра (А, В…).
+    # Считается здесь, а не на фронте: отклонения — дело бэкенда
+    direction = serializers.SerializerMethodField()
+    delta = serializers.SerializerMethodField()
  
     class Meta:
         model = Deviation
@@ -575,7 +645,30 @@ class DeviationSerializer(serializers.ModelSerializer):
             "equipment_name", "welder_name", "mode",
             "part_number", "serial_no", "seam_number", "operation_number",
             "pass_no", "weld_id", "run_id",
+            "direction", "delta",
         ]
+
+    def get_direction(self, obj) -> str | None:
+        """'above' — выше верхней границы, 'below' — ниже нижней.
+
+        None у нарушений порядка: там нет ни значения, ни допуска.
+        """
+        if obj.actual_value is None:
+            return None
+        if obj.planned_max is not None and obj.actual_value > obj.planned_max:
+            return "above"
+        if obj.planned_min is not None and obj.actual_value < obj.planned_min:
+            return "below"
+        return None
+
+    def get_delta(self, obj) -> str | None:
+        """На сколько вышли за границу. Строкой, как все десятичные в API."""
+        direction = self.get_direction(obj)
+        if direction == "above":
+            return str(obj.actual_value - obj.planned_max)
+        if direction == "below":
+            return str(obj.planned_min - obj.actual_value)
+        return None
  
     def get_duration_seconds(self, obj) -> int | None:
         """DurationField приходит строкой вида '00:00:12'.

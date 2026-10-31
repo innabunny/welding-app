@@ -49,3 +49,59 @@
     }
   }
 }
+
+/*
+ * Экраны телеметрии — разметка и шрифты из референса заказчика
+ * (docs/telemetry-demo.html), цвета — токены портала.
+ */
+@layer components {
+  .tm {
+    font-family: 'IBM Plex Sans', system-ui, 'Segoe UI', Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .tm .font-mono {
+    font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  }
+  .tm .label {
+    font-family: 'IBM Plex Sans Condensed', 'Arial Narrow', system-ui, sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .tm .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .tm .arc-dot {
+    animation: arc-glow 1.4s ease-in-out infinite;
+  }
+  .tm .crit-blink {
+    animation: crit-blink 1s steps(2, jump-none) infinite;
+  }
+  /* штриховка «остаток смены» на полосе загрузки */
+  .tm .hatch {
+    background: repeating-linear-gradient(135deg, rgb(var(--c-border)) 0 2px, transparent 2px 6px);
+  }
+}
+
+@keyframes arc-glow {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(var(--c-teal) / 0.55);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 6px rgb(var(--c-teal) / 0);
+  }
+}
+
+@keyframes crit-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

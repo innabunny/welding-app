@@ -11,6 +11,8 @@ export function AppLayout() {
   const token = useSession((s) => s.token)
   const location = useLocation()
   const sidebarHidden = useSidebar((s) => s.hidden)
+  // телеметрия оформлена по референсу заказчика: тёмная, своя палитра и шрифты
+  const telemetry = location.pathname.startsWith(paths.telemetry)
 
   if (!token) {
     const next = encodeURIComponent(location.pathname + location.search)
@@ -25,7 +27,7 @@ export function AppLayout() {
       )}
     >
       <Sidebar hidden={sidebarHidden} />
-      <main className="min-w-0">
+      <main className={cn('min-w-0', telemetry && 'tm')}>
         <Topbar />
         <div className="mx-auto max-w-content px-4 pb-10 pt-5 md:px-7 md:pb-12 md:pt-[26px]">
           <Outlet />

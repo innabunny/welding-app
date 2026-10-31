@@ -13,8 +13,10 @@ import {
   fetchSessionArcs,
   fetchSessionDeviations,
   fetchSessionSamples,
+  fetchTelemetrySummary,
   fetchWeldingSession,
 } from '@/shared/api/telemetry'
+import type { SummaryFilters } from '@/shared/types/summary'
 import type { SaveVars } from '@/shared/ui/FormModal'
 import { toDraft, type DecisionForm } from './decision'
 
@@ -33,6 +35,7 @@ export const telemetryKeys = {
   pendingDeviations: ['deviations', { pending: true }] as const,
   equipmentSessions: (id: number) => ['welding-sessions', { equipment: id }] as const,
   currentShift: (workshop: number | null) => ['shift-schedules', 'current', workshop] as const,
+  summary: (filters: SummaryFilters) => ['telemetry-summary', filters] as const,
 }
 
 /** Префиксы, которые устаревают по событиям сеанса из WebSocket */
@@ -152,3 +155,12 @@ export function useCreateWeldDecision() {
       ]),
   })
 }
+
+/** Сводка за период. Раз в минуту — цифры смены растут, пока она идёт */
+export const useTelemetrySummary = (filters: SummaryFilters) =>
+  useQuery({
+    queryKey: telemetryKeys.summary(filters),
+    queryFn: () => fetchTelemetrySummary(filters),
+    refetchInterval: 60_000,
+    placeholderData: (prev) => prev,
+  })

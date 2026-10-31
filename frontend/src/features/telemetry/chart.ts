@@ -29,10 +29,12 @@ export interface ChartRow {
   iTol: Range | null
   /** допуск по напряжению из карты */
   uTol: Range | null
+  /** номер прохода по карте — для подписи «Проход N» над графиком */
+  passNo: number | null
   arcId: number | null
 }
 
-const GAP: Omit<ChartRow, 't'> = { i: null, band: null, u: null, uBand: null, iTol: null, uTol: null, arcId: null }
+const GAP: Omit<ChartRow, 't'> = { i: null, band: null, u: null, uBand: null, iTol: null, uTol: null, passNo: null, arcId: null }
 
 /**
  * Пустые корзины сервер не присылает: между проходами просто нет точек.
@@ -62,6 +64,7 @@ export function toChartRows(
       uBand: p.uMin !== undefined && p.uMax !== undefined ? [p.uMin, p.uMax] : null,
       iTol: pass ? range(pass.currentMin, pass.currentMax) : null,
       uTol: pass ? range(pass.voltageMin, pass.voltageMax) : null,
+      passNo: pass?.no ?? null,
       arcId: p.arcId ?? null,
     })
     prev = p
@@ -88,4 +91,16 @@ export function timeTicks(from: number, to: number, target = 8): number[] {
   const ticks: number[] = []
   for (let t = Math.ceil((from - offset) / step) * step + offset; t <= to; t += step) ticks.push(t)
   return ticks
+}
+
+/** Отрезки времени, отнесённые к проходам: подписи «Проход N» над графиком */
+export function passSpans(rows: ChartRow[]): { no: number; from: number; to: number }[] {
+  const spans = new Map<number, { no: number; from: number; to: number }>()
+  for (const r of rows) {
+    if (r.passNo === null) continue
+    const s = spans.get(r.passNo)
+    if (s) s.to = r.t
+    else spans.set(r.passNo, { no: r.passNo, from: r.t, to: r.t })
+  }
+  return [...spans.values()]
 }

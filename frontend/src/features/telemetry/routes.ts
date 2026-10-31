@@ -1,5 +1,7 @@
 import { paths } from '@/layouts/navigation'
 
-/** Экран одного аппарата; ?session=<id> — показать прошлый сеанс */
-export const equipmentPath = (id: number, session?: number) =>
-  `${paths.telemetry}/equipment/${id}${session ? `?session=${session}` : ''}`
+/** Экран одного аппарата */
+export const equipmentPath = (id: number) => `${paths.telemetry}/equipment/${id}`
+
+/** «Оборудование в работе»; view — вкладка «вне допуска» или «нет связи» */
+export const activePath = (view?: 'out' | 'offline') => `${paths.telemetry}/active${view ? `?view=${view}` : ''}`

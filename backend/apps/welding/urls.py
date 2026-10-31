@@ -1,4 +1,5 @@
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -13,6 +14,7 @@ from .views import (
     UtilizationViewSet,
     WeldDecisionViewSet,
     DeviationViewSet,
+    TelemetrySummaryView,
 )
 
 router = DefaultRouter()
@@ -28,4 +30,7 @@ router.register("utilization", UtilizationViewSet, basename="utilization")
 router.register("weld-decisions", WeldDecisionViewSet, basename="weld-decision")
 router.register("deviations", DeviationViewSet, basename="deviation")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("telemetry-summary/", TelemetrySummaryView.as_view()),
+    *router.urls,
+]

@@ -1,118 +1,89 @@
-import { AlertOctagon } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
-import { formatNumber, formatRange } from '@/shared/lib/format'
+import { toNumber } from '@/shared/lib/format'
 import type { Deviation } from '@/shared/types/deviations'
 import type { ArcRun } from '@/shared/types/telemetry'
-import { Badge } from '@/shared/ui/Badge'
-import { Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { MatchSourceBadge } from './Badges'
-import { formatClock, formatTime } from './format'
-import { deviationsOnArc, type PlanIndex } from './plan'
+import { VerdictCell, type ArcVerdict } from './Badges'
+import { fmt1, fmtTol, formatClock, formatTime, secondsSince } from './format'
+import { deviationsOnArc, fit, range, type PlanIndex } from './plan'
+
+const TH = 'label whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-muted'
+const TD = 'whitespace-nowrap px-3 py-2.5'
 
 interface Props {
   arcs: ArcRun[]
   plan: PlanIndex
   deviations: Deviation[]
-  selectedId: number | null
-  onSelect: (id: number | null) => void
   now: number
 }
 
-/**
- * Участки дуги — таблица к графику: те же данные, но читаемые без
- * наведения мыши. Строка открывает график одного участка.
- */
-export function ArcsTable({ arcs, plan, deviations, selectedId, onSelect, now }: Props) {
+/** Участки дуги сеанса — те же данные, что на графике, но читаемые без наведения */
+export function ArcsTable({ arcs, plan, deviations, now }: Props) {
   return (
-    <Table>
-      <thead>
-        <tr>
-          <Th>Участок</Th>
-          <Th>Проход</Th>
-          <Th>Граница прохода</Th>
-          <Th>Начало</Th>
-          <Th className="text-right">Длительность</Th>
-          <Th className="text-right">Ток ср., А</Th>
-          <Th>Допуск, А</Th>
-          <Th className="text-right">Напр. ср., В</Th>
-          <Th>Допуск, В</Th>
-          <Th className="text-right">Импульс, Гц</Th>
-          <Th>Отклонения</Th>
-        </tr>
-      </thead>
-      <tbody>
-        {arcs.map((arc, idx) => {
-          const pass = plan.passById(arc.plannedPassId)
-          const onArc = deviationsOnArc(arc, deviations, now)
-          const pending = onArc.filter((d) => !d.reviewed).length
-          const selected = arc.id === selectedId
-          const burning = arc.finishedAt === null
-          return (
-            <Tr
-              key={arc.id}
-              onClick={() => onSelect(selected ? null : arc.id)}
-              className={cn(
-                'cursor-pointer hover:bg-surface-2/60',
-                selected && 'bg-primary-soft hover:bg-primary-soft',
-                pending > 0 && '[&>td:first-child]:shadow-[inset_4px_0_0_rgb(var(--c-danger))]',
-              )}
-            >
-              <Td className="!pl-3">
-                <button
-                  type="button"
-                  aria-pressed={selected}
-                  aria-label={`График участка ${idx + 1}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelect(selected ? null : arc.id)
-                  }}
-                  className="font-mono font-semibold hover:text-primary"
-                >
-                  №{idx + 1}
-                </button>
-              </Td>
-              <Td>{arc.passNo ?? <span className="text-muted">—</span>}</Td>
-              <Td>
-                <MatchSourceBadge source={arc.matchSource} label={arc.matchSourceDisplay} />
-              </Td>
-              <Td className="font-mono">{formatTime(arc.startedAt, true)}</Td>
-              <Td className="whitespace-nowrap text-right">
-                {burning ? (
-                  <span className="text-success">горит</span>
-                ) : (
-                  <span className="font-mono">{formatClock(arc.durationSeconds)}</span>
-                )}
-                {!arc.telemetryComplete && !burning && (
-                  <span className="block text-xs text-warning">замеры дошли не полностью</span>
-                )}
-              </Td>
-              <Td className="whitespace-nowrap text-right">
-                <span className="font-mono font-semibold">{formatNumber(arc.currentAvg)}</span>
-                <span className="block font-mono text-xs text-muted">{formatRange(arc.currentMin, arc.currentMax)}</span>
-              </Td>
-              <Td className="whitespace-nowrap">
-                {pass ? formatRange(pass.currentMin, pass.currentMax) : <span className="text-muted">нет</span>}
-              </Td>
-              <Td className="text-right font-mono">{formatNumber(arc.voltageAvg)}</Td>
-              <Td className="whitespace-nowrap">
-                {pass ? formatRange(pass.voltageMin, pass.voltageMax) : <span className="text-muted">нет</span>}
-              </Td>
-              <Td className="text-right font-mono">{formatNumber(arc.pulseFreq, 2)}</Td>
-              <Td>
-                {onArc.length === 0 ? (
-                  <span className="text-muted">нет</span>
-                ) : pending > 0 ? (
-                  <Badge tone="red" icon={<AlertOctagon />}>
-                    {pending} ждёт решения
-                  </Badge>
-                ) : (
-                  <span className="text-muted">рассмотрено: {onArc.length}</span>
-                )}
-              </Td>
-            </Tr>
-          )
-        })}
-      </tbody>
-    </Table>
+    <div className="overflow-x-auto rounded-[8px] ring-1 ring-line">
+      <table className="tnum w-full min-w-[960px] border-collapse bg-panel text-[15px]">
+        <thead className="bg-panel2">
+          <tr>
+            <th className={TH}>Участок</th>
+            <th className={TH}>Проход</th>
+            <th className={TH}>Начало</th>
+            <th className={TH}>Длительность</th>
+            <th className={cn(TH, 'text-right')}>Ток ср.</th>
+            <th className={cn(TH, 'text-right')}>Мин–макс</th>
+            <th className={TH}>Допуск</th>
+            <th className={cn(TH, 'text-right')}>Напр. ср.</th>
+            <th className={cn(TH, 'text-right')}>Импульс</th>
+            <th className={TH}>Привязка</th>
+            <th className={TH}>Итог</th>
+          </tr>
+        </thead>
+        <tbody>
+          {arcs.map((arc, idx) => {
+            const pass = plan.passById(arc.plannedPassId)
+            const bad = deviationsOnArc(arc, deviations, now).length > 0
+            const burning = arc.finishedAt === null
+            const verdict: ArcVerdict = bad ? 'deviation' : arc.passNo === null ? 'unassigned' : pass ? 'ok' : 'no-plan'
+            // среднее вне границ карты — только подсветка цифры
+            const avgOut = pass !== null && fit(toNumber(arc.currentAvg), range(pass.currentMin, pass.currentMax)) === 'out'
+            return (
+              <tr key={arc.id} className={cn('border-t border-line', bad && 'bg-crit-bg')}>
+                <td className={cn(TD, 'font-mono text-fg2')}>
+                  <span className="flex items-center gap-2">
+                    {bad && <span className="inline-block h-5 w-1 rounded-[4px] bg-crit" aria-hidden />}#{idx + 1}
+                  </span>
+                </td>
+                <td className={TD}>
+                  {arc.passNo === null ? (
+                    <span className="text-muted">не сопоставлен</span>
+                  ) : (
+                    <span className="font-semibold text-fg">{arc.passNo}</span>
+                  )}
+                </td>
+                <td className={cn(TD, 'font-mono text-fg2')}>{formatTime(arc.startedAt, true)}</td>
+                <td className={cn(TD, 'font-mono')}>
+                  {formatClock(burning ? secondsSince(arc.startedAt, now) : arc.durationSeconds)}
+                  {burning && (
+                    <span className="label ml-2 inline-flex items-center gap-1 text-xs text-arc">
+                      <span className="arc-dot inline-block size-1.5 rounded-full bg-arc" aria-hidden />
+                      идёт
+                    </span>
+                  )}
+                </td>
+                <td className={cn(TD, 'text-right font-mono font-semibold', avgOut ? 'text-crit' : 'text-fg')}>{fmt1(arc.currentAvg)} А</td>
+                <td className={cn(TD, 'text-right font-mono text-fg2')}>
+                  {fmt1(arc.currentMin)}–{fmt1(arc.currentMax)}
+                </td>
+                <td className={cn(TD, 'text-fg2')}>{pass ? fmtTol(pass.currentMin, pass.currentMax, 'А') : '—'}</td>
+                <td className={cn(TD, 'text-right font-mono text-fg')}>{fmt1(arc.voltageAvg)} В</td>
+                <td className={cn(TD, 'text-right font-mono text-fg2')}>{arc.pulseFreq === null ? '—' : `${fmt1(arc.pulseFreq)} Гц`}</td>
+                <td className={cn(TD, 'text-fg2')}>{arc.matchSourceDisplay || arc.matchSource || '—'}</td>
+                <td className={TD}>
+                  <VerdictCell v={verdict} />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

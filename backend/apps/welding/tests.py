@@ -231,3 +231,36 @@ class DecisionRulesTests(TransactionTestCase):
         patch = self.client_as("master").patch(f"/api/weld-decisions/{decision_id}/", {"reason": "x"}, format="json")
         self.assertEqual(patch.status_code, 403)
         self.assertEqual(WeldDecision.objects.get(id=decision_id).reason, "")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+class TelemetrySummaryTests(TransactionTestCase):
+    """Сводка «Сварочное производство»: форма ответа и проверка параметров."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="summary", password="x"))
+
+    def test_needs_period(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-01")
+        self.assertEqual(r.status_code, 400)
+
+    def test_end_before_start(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-10&to=2026-10-01")
+        self.assertEqual(r.status_code, 400)
+
+    def test_empty_fleet_has_all_blocks(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-01&to=2026-10-07")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        for block in ("load", "deviations", "materials", "works", "types"):
+            self.assertIn(block, data)
+        # без оборудования фонда нет — Кз не считается от нуля
+        self.assertEqual(data["load"]["fundSeconds"], 0)
+        self.assertEqual(data["load"]["kz"], 0)
+        self.assertEqual([t["type"] for t in data["types"]], ["arc", "contact", "ebw", "diff"])
+        self.assertEqual(set(data["works"]["arc"]["quality"]), {
+            "без отклонений", "допущено", "на контроль", "не рассмотрено", "на переварку",
+        })

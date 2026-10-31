@@ -1,6 +1,7 @@
 import type { CurrentShift } from '@/shared/types/shifts'
 import type { Deviation, WeldDecision, WeldDecisionDraft } from '@/shared/types/deviations'
 import type { NodeState, NodeSummary } from '@/shared/types/nodes'
+import type { SummaryFilters, TelemetrySummary } from '@/shared/types/summary'
 import type { ArcRun, ArcSamples, SessionSamples } from '@/shared/types/telemetry'
 import type { WeldingSession } from '@/shared/types/welding'
 import { api } from './client'
@@ -79,5 +80,10 @@ export async function fetchSessionDecisions(sessionId: number): Promise<WeldDeci
   const { data } = await api.get<WeldDecision[]>('/weld-decisions/', {
     params: { session: String(sessionId) },
   })
+  return data
+}
+
+export async function fetchTelemetrySummary(filters: SummaryFilters): Promise<TelemetrySummary> {
+  const { data } = await api.get<TelemetrySummary>('/telemetry-summary/', { params: filters })
   return data
 }
