@@ -1,11 +1,11 @@
-import { X } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { IdCard, X } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useWelders, useWorkshops } from '@/features/attestation/queries'
 import { useEquipmentList } from '@/features/equipment/queries'
 import { fmtDate } from '@/features/telemetry/format'
 import { buildPosts } from '@/features/telemetry/posts'
 import { useActiveSessions, useNodes, useTelemetrySummary } from '@/features/telemetry/queries'
-import { activePath } from '@/features/telemetry/routes'
+import { activePath, cardTapsPath } from '@/features/telemetry/routes'
 import {
   DeviationsCard,
   LoadCard,
@@ -122,6 +122,10 @@ export function TelemetrySummaryPage() {
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="tnum font-cond text-[26px] font-semibold leading-tight text-fg first-letter:uppercase sm:text-[30px]">{heading}</h1>
           <p className="text-fg2 first-letter:uppercase">{scope}</p>
+          <Link to={cardTapsPath()} className="mt-1 inline-flex w-fit items-center gap-1.5 text-[14px] text-fg2 underline-offset-4 hover:text-fg hover:underline">
+            <IdCard className="size-4" aria-hidden />
+            Журнал прикладываний карт
+          </Link>
         </div>
         <StatusBlock
           active={posts.filter((p) => p.session !== null).length}

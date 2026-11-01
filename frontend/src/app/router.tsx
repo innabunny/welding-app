@@ -7,6 +7,7 @@ import { AttestationPage } from '@/pages/AttestationPage'
 import { CardEditPage } from '@/pages/CardEditPage'
 import { CardSheetPage } from '@/pages/CardSheetPage'
 import { CardsPage } from '@/pages/CardsPage'
+import { CardTapsPage } from '@/pages/CardTapsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { EquipmentPage } from '@/pages/EquipmentPage'
 import { EquipmentTelemetryPage } from '@/pages/EquipmentTelemetryPage'
@@ -61,6 +62,11 @@ export const router = createBrowserRouter([
         path: `${paths.telemetry}/equipment/:id`,
         element: <EquipmentTelemetryPage />,
         handle: { crumb: 'Аппарат' } satisfies RouteHandle,
+      },
+      {
+        path: `${paths.telemetry}/card-taps`,
+        element: <CardTapsPage />,
+        handle: { crumb: 'Журнал прикладываний карт' } satisfies RouteHandle,
       },
       // временно: проверка данных телеметрии, без оформления
       {
