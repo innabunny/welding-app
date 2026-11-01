@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
 import type { WeldingSession } from '@/shared/types/welding'
 import { modeLabel } from './Badges'
-import { fmtSpan, formatTime } from './format'
+import { fmtSpan, formatDay, formatTime } from './format'
 import { STALE_SESSION_SECONDS } from './posts'
 
 function Field({ label, children, mono = false, wide = false }: { label: string; children: ReactNode; mono?: boolean; wide?: boolean }) {
@@ -25,10 +25,11 @@ export function SessionCard({ session, now }: { session: WeldingSession; now: nu
   return (
     <section aria-label="Сеанс" className="rounded-[8px] bg-panel px-5 py-4 ring-1 ring-line">
       <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="label text-[16px] text-fg">{stale ? 'Сеанс не закрыт' : open ? 'Текущий сеанс' : 'Последний сеанс'}</h2>
+        <h2 className="label text-[16px] text-fg">{stale ? 'Сеанс не закрыт' : open ? 'Текущий сеанс' : 'Сеанс'}</h2>
         <span className="font-mono text-[14px] text-muted">{String(session.id).padStart(4, '0')}</span>
         <span className="text-[14px] text-fg2">
-          {formatTime(session.startedAt, true)} – {open ? 'идёт' : formatTime(session.finishedAt, true)} · {fmtSpan(length)}
+          {formatDay(session.startedAt, false)} · {formatTime(session.startedAt, true)} –{' '}
+          {open ? 'идёт' : formatTime(session.finishedAt, true)} · {fmtSpan(length)}
         </span>
       </div>
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
