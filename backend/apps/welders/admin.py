@@ -29,6 +29,7 @@ class WelderAdmin(admin.ModelAdmin):
         "experience_years",
         "attestation_state",
         "has_card",
+        "is_service",
         "is_active",
     )
     list_filter = ("workshop", "is_active", "rank")
@@ -50,7 +51,7 @@ class WelderAdmin(admin.ModelAdmin):
                 "Печатный номер на карте — тот же UID в десятичном виде "
                 "с нулями до 10 знаков."
             ),
-            "fields": ("rfid_uid",),
+            "fields": ("rfid_uid", "is_service"),
         }),
     )
 
