@@ -379,3 +379,71 @@ class NodeStatusEventTests(TransactionTestCase):
         await sync_to_async(touch)("node-ev")
         self.assertEqual(await ws.receive_json_from(timeout=2), {"event": "node_online", "node": "node-ev"})
         await ws.disconnect()
+
+
+# ───────────── журнал прикладываний карт ─────────────
+
+from django.contrib.admin.sites import site as admin_site  # noqa: E402
+from django.test import RequestFactory, TestCase  # noqa: E402
+
+from apps.welders.models import Welder  # noqa: E402
+
+from .models import CardTap  # noqa: E402
+
+
+class CardTapApiTests(TestCase):
+    """Журнал только читается: фильтры, страницы, никаких правок."""
+
+    def setUp(self):
+        method = WeldingMethod.objects.create(id="tig-j", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        self.eq1 = Equipment.objects.create(name="Аппарат 1", method=method, node_id="node-j1")
+        self.eq2 = Equipment.objects.create(name="Аппарат 2", method=method, node_id="node-j2")
+        self.w = Welder.objects.create(fio="Иванов И. И.", education="—", rfid_uid="00aa00aa")
+        t = timezone.make_aware(timezone.datetime(2026, 11, 2, 9, 0))
+
+        def tap(eq, accepted, days, welder=None, seq=1):
+            CardTap.objects.create(
+                node_id=eq.node_id, equipment=eq, equipment_name=eq.name,
+                card_uid="00aa00aa", welder=welder, welder_name=welder.fio if welder else "",
+                accepted=accepted, reason="" if accepted else "нет действующей аттестации",
+                tapped_at=t + timedelta(days=days), node_seq=seq,
+            )
+
+        tap(self.eq1, True, 0, self.w, 1)
+        tap(self.eq1, False, 1, self.w, 2)
+        tap(self.eq2, False, 5, None, 1)
+        self.user = get_user_model().objects.create_user(username="taps", password="x")
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def get(self, **params):
+        r = self.api.get("/api/card-taps/", params)
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json()
+
+    def test_filters(self):
+        self.assertEqual(self.get()["count"], 3)
+        self.assertEqual(self.get(equipment=self.eq1.id)["count"], 2)
+        self.assertEqual(self.get(welder=self.w.id)["count"], 2)
+        self.assertEqual(self.get(result="refused")["count"], 2)
+        self.assertEqual(self.get(result="accepted")["count"], 1)
+        self.assertEqual(self.get(**{"from": "2026-11-03", "to": "2026-11-03"})["count"], 1)
+        # новые сверху, поля в camelCase
+        first = self.get()["results"][0]
+        self.assertEqual(first["equipmentName"], "Аппарат 2")
+        self.assertFalse(first["accepted"])
+
+    def test_bad_date_is_400_not_500(self):
+        self.assertEqual(self.api.get("/api/card-taps/", {"from": "вчера"}).status_code, 400)
+
+    def test_read_only_api_and_admin(self):
+        tap = CardTap.objects.first()
+        self.assertEqual(self.api.post("/api/card-taps/", {}).status_code, 405)
+        self.assertEqual(self.api.delete(f"/api/card-taps/{tap.id}/").status_code, 405)
+        # даже суперпользователь в админке не может добавить, поправить, удалить
+        admin = admin_site._registry[CardTap]
+        request = RequestFactory().get("/")
+        request.user = get_user_model().objects.create_superuser(username="root", password="x")
+        self.assertFalse(admin.has_add_permission(request))
+        self.assertFalse(admin.has_change_permission(request, tap))
+        self.assertFalse(admin.has_delete_permission(request, tap))

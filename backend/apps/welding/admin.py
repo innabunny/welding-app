@@ -13,6 +13,7 @@ from .models import (
     NodeOutage,
     Deviation,
     WeldDecision,
+    CardTap,
 )
 
 
@@ -182,4 +183,35 @@ class WeldDecisionAdmin(admin.ModelAdmin):
     # отклонений на одно решение бывает много: выбор двумя списками
     # вместо многострочного поля
     filter_horizontal = ["deviations"]
-    readonly_fields = ["author_name", "created_at"]    
+    readonly_fields = ["author_name", "created_at"]
+
+
+@admin.register(CardTap)
+class CardTapAdmin(admin.ModelAdmin):
+    """Журнал прикладываний карт. Записи создаёт приёмник; это журнал-
+    доказательство, поэтому здесь их нельзя ни добавить, ни поправить,
+    ни удалить — даже администратору."""
+
+    list_display = [
+        "tapped_at", "node_id", "equipment_name", "card_uid",
+        "welder_name", "result", "reason", "node_seq",
+    ]
+    list_filter = ["accepted", "equipment", "tapped_at"]
+    search_fields = ["card_uid", "welder_name", "node_id", "equipment_name"]
+    date_hierarchy = "tapped_at"
+    list_select_related = ["equipment", "welder"]
+
+    @admin.display(description="Результат")
+    def result(self, obj):
+        if obj.accepted:
+            return format_html('<span style="color:{}">{}</span>', "#24785a", "принята")
+        return format_html('<b style="color:{}">{}</b>', "#b34242", "ОТКАЗ")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

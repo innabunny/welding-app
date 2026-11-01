@@ -19,7 +19,7 @@ from .models import (
     NodeState,
     Deviation,
     WeldDecision,
-
+    CardTap,
 )
 
 
@@ -766,4 +766,17 @@ class WeldDecisionSerializer(serializers.ModelSerializer):
             })
  
         return attrs
- 
+
+
+class CardTapSerializer(serializers.ModelSerializer):
+    """Прикладывание карты — для журнала в портале. Только чтение."""
+
+    class Meta:
+        model = CardTap
+        fields = [
+            "id", "node_id", "equipment_id", "equipment_name",
+            "card_uid", "welder_id", "welder_name",
+            "accepted", "reason", "tapped_at", "node_seq",
+            "node_cards_ver", "portal_cards_ver",
+        ]
+        read_only_fields = fields

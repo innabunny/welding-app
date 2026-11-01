@@ -15,6 +15,7 @@ from .views import (
     WeldDecisionViewSet,
     DeviationViewSet,
     TelemetrySummaryView,
+    CardTapViewSet,
 )
 
 router = DefaultRouter()
@@ -29,6 +30,7 @@ router.register("nodes", NodeStateViewSet, basename="node")
 router.register("utilization", UtilizationViewSet, basename="utilization")
 router.register("weld-decisions", WeldDecisionViewSet, basename="weld-decision")
 router.register("deviations", DeviationViewSet, basename="deviation")
+router.register("card-taps", CardTapViewSet, basename="card-tap")
 
 urlpatterns = [
     path("telemetry-summary/", TelemetrySummaryView.as_view()),

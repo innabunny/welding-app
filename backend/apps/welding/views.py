@@ -1,5 +1,7 @@
 from django.db.models import Count, Prefetch, Q
 from rest_framework import permissions, viewsets
+from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -26,7 +28,8 @@ from .models import (
     NodeOutage,
     NodeState,
     Deviation,
-    WeldDecision
+    WeldDecision,
+    CardTap,
   )
 from .serializers import (
     ArcRunSerializer,
@@ -40,7 +43,8 @@ from .serializers import (
     NodeOutageSerializer,
     NodeStateSerializer,
     DeviationSerializer,
-    WeldDecisionSerializer
+    WeldDecisionSerializer,
+    CardTapSerializer,
 )
 
 
@@ -781,3 +785,61 @@ class TelemetrySummaryView(APIView):
             "workstation", "workstation__section", "workstation__section__workshop", "method",
         )
         return Response(build_summary(filters, qs))
+
+
+class CardTapPagination(PageNumberPagination):
+    """Журнал растёт годами: отдаём страницами, а не целиком."""
+
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class CardTapViewSet(viewsets.ReadOnlyModelViewSet):
+    """Журнал прикладываний карт — только чтение, записи создаёт приёмник.
+
+    /api/card-taps/?equipment=12&welder=4&from=2026-11-01&to=2026-11-30&result=refused
+
+    from и to — даты включительно, по местному времени.
+    result — accepted (принята) или refused (отказ).
+    """
+
+    queryset = CardTap.objects.all()
+    serializer_class = CardTapSerializer
+    pagination_class = CardTapPagination
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        equipment = params.get("equipment")
+        if equipment:
+            qs = qs.filter(equipment_id=equipment)
+
+        welder = params.get("welder")
+        if welder:
+            qs = qs.filter(welder_id=welder)
+
+        # даты включительно; __date сравнивает в часовом поясе портала
+        def day(key):
+            value = params.get(key)
+            if not value:
+                return None
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                raise ValidationError({key: "Дата в виде ГГГГ-ММ-ДД"})
+
+        date_from, date_to = day("from"), day("to")
+        if date_from:
+            qs = qs.filter(tapped_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(tapped_at__date__lte=date_to)
+
+        result = params.get("result")
+        if result == "accepted":
+            qs = qs.filter(accepted=True)
+        elif result == "refused":
+            qs = qs.filter(accepted=False)
+
+        return qs
