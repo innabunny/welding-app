@@ -20,17 +20,30 @@
 #       расширялась бы к концу прохода. Она идёт в участок дуги
 #       при его закрытии
 #   t, free        — температура и свободная память узла → диагностика
+#   cards_ver, cards_n — версия списка разрешённых карт на узле и число карт
+#       в нём. cards_ver пустой — списка нет, узел запрещает сварку всем
+#   tap_uid, tap_ok, tap_age, tap_seq — последнее прикладывание карты:
+#       номер, принята ли, сколько секунд назад, порядковый номер события
+#
+# Список разрешённых карт узел хранит у себя и сам решает, пускать ли
+# сварщика. Приёмник собирает для каждого узла свой список из базы —
+# с учётом способа сварки его аппарата (см. CardList), сравнивает
+# его версию с cards_ver узла и, если разошлись, отправляет новый
+# на POST /api/cards.
 
+import hashlib
 import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import requests
 from django.db import close_old_connections
+from django.db.models import Exists, OuterRef, Q
 
+from apps.attestation.models import Attestation
 from apps.equipment.models import Equipment
 from apps.welders.models import Welder
 from apps.welding.broadcast import send_event, send_live
@@ -65,6 +78,19 @@ SLOW_AFTER_FAILS = 10
 SLOW_PERIOD_SECONDS = 2.0
 RESCAN_SECONDS = 30
 
+# Список карт собирается запросом к базе — не на каждом такте опроса,
+# а не чаще, чем раз в столько секунд для каждого узла. Новая аттестация
+# или карта доедет до узла с такой задержкой
+CARDS_REFRESH_SECONDS = 5.0
+# куда узел принимает список
+CARDS_PATH = "/api/cards"
+# список длиннее ответа о состоянии — ждём ответа дольше
+CARDS_TIMEOUT = 3.0
+# Отправили, а узел всё ещё показывает старую версию — повторяем
+# не раньше, чем через столько секунд, чтобы не слать список
+# на каждом такте, если узел его не принимает
+CARDS_RETRY_SECONDS = 15.0
+
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -75,6 +101,91 @@ def dec(value, places: int = 1) -> Decimal | None:
     if value is None:
         return None
     return Decimal(str(round(float(value), places)))
+
+
+class CardList:
+    """Списки карт, которым разрешено варить, — свой у каждого узла.
+
+    В список узла входят активные сварщики с привязанной картой, у которых
+    есть действующая аттестация на способ сварки аппарата, к которому
+    привязан узел: допуск на аргонодуговую не пускает на полуавтомат.
+    Сервисные карты (is_service) входят в любой список без аттестации.
+
+    Версия — отпечаток самого списка: первые 8 знаков SHA-1 от
+    отсортированных номеров. Одинаковый набор карт — одинаковая версия,
+    поменялся хоть один номер — версия другая. Счётчик вручную вести
+    не нужно, и после перезапуска приёмника версия та же.
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        # узел → (когда собран, версия, номера)
+        self.cache: dict[str, tuple[float, str, list[str]]] = {}
+
+    def get(self, node_id: str) -> tuple[str, list[str]]:
+        """Версия и номера карт для узла. Из базы — не чаще CARDS_REFRESH_SECONDS.
+
+        Потоков опроса несколько (по одному на узел): lock не даёт им
+        одновременно править общий кэш.
+        """
+        with self.lock:
+            cached = self.cache.get(node_id)
+            if cached is None or time.monotonic() - cached[0] >= CARDS_REFRESH_SECONDS:
+                # способ берём заново при каждой сборке: аппарату в
+                # справочнике могли поменять способ, и список должен это учесть
+                method_id = (
+                    Equipment.objects.filter(node_id=node_id)
+                    .values_list("method_id", flat=True).first()
+                )
+                if method_id is None:
+                    log.warning("узел %s не привязан к оборудованию — в списке "
+                                "только сервисные карты", node_id)
+                cached = (time.monotonic(), *self.build(method_id))
+                self.cache[node_id] = cached
+            return cached[1], cached[2]
+
+    @staticmethod
+    def build(method_id: str | None) -> tuple[str, list[str]]:
+        """Список для аппарата со способом method_id.
+
+        method_id None — аппарат неизвестен: способ проверить не на чем,
+        поэтому пускаем только сервисные карты, а не всех аттестованных.
+        """
+        allowed = Q(is_service=True)
+        if method_id is not None:
+            # «есть действующая аттестация на этот способ» — подзапрос,
+            # база проверяет его сразу для всех сварщиков одним запросом
+            valid = Attestation.objects.filter(
+                welder=OuterRef("pk"), method_id=method_id,
+                status="done", valid_until__gte=date.today(),
+            )
+            allowed |= Q(Exists(valid))
+        raw = (
+            Welder.objects.filter(is_active=True)
+            .exclude(rfid_uid__isnull=True).exclude(rfid_uid="")
+            .filter(allowed)
+            .values_list("rfid_uid", flat=True)
+        )
+        uids = set()
+        for uid in raw:
+            uid = uid.strip().lower()
+            # в строку списка — только шестнадцатеричный номер: всё прочее
+            # узел не разберёт, а перевод строки сломал бы формат
+            if uid and all(c in "0123456789abcdef" for c in uid):
+                uids.add(uid)
+            else:
+                log.warning("карта %r не похожа на hex-номер — в список для узлов не включена", uid)
+        uids = sorted(uids)
+        version = hashlib.sha1("\n".join(uids).encode()).hexdigest()[:8]
+        return version, uids
+
+    @staticmethod
+    def body(version: str, uids: list[str]) -> str:
+        """Текст для узла: первая строка v=<версия>, дальше по номеру на строку."""
+        return "\n".join([f"v={version}", *uids]) + "\n"
+
+
+CARDS = CardList()
 
 
 class NodePoller(threading.Thread):
@@ -103,6 +214,15 @@ class NodePoller(threading.Thread):
         # не открываем, пока не загорится дуга, карту не уберут или не
         # приложат другую. None — запрета нет
         self.blocked_uid: str | None = None
+
+        # отправка списка карт: какую версию и когда отправили последней
+        self.cards_url = f"http://{ip}{CARDS_PATH}"
+        self.cards_sent_ver: str | None = None
+        self.cards_sent_at = 0.0
+        # версия на узле с прошлого такта — чтобы писать в журнал только смену
+        self.cards_node_ver: str | None = None
+        # номер последнего прикладывания карты, уже записанного в журнал
+        self.tap_seq = None
 
         self.fails = 0
         self.last_ok_at: datetime | None = None
@@ -233,6 +353,88 @@ class NodePoller(threading.Thread):
             "sid": self.session.external_id if self.session else "",
             "ts": int(at.timestamp() * 1000),
         })
+
+        # Список карт и журнал прикладываний — в конце такта и каждый
+        # в своём try: сбой в них не должен ломать сеанс и точки сварки
+        try:
+            self.log_tap(st)
+        except Exception:
+            log.exception("узел %s: ошибка записи прикладывания карты", self.node_id)
+        try:
+            self.sync_cards(st)
+        except Exception:
+            log.exception("узел %s: ошибка сверки списка карт", self.node_id)
+
+    # ─────────────────────── карты ───────────────────────
+
+    def log_tap(self, st: dict):
+        """Прикладывание карты — в журнал приёмника, и принятые, и отказы.
+
+        Узел отдаёт только последнее прикладывание, и одно и то же
+        приходит в ответе на каждом такте. Новое событие — когда сменился
+        tap_seq. После перезагрузки узла счёт начинается заново, поэтому
+        сравниваем на «не равно», а не на «больше».
+        """
+        seq = st.get("tap_seq")
+        uid = (st.get("tap_uid") or "").strip().lower()
+        if seq is None or seq == self.tap_seq:
+            return
+        self.tap_seq = seq
+        if not uid:
+            return  # с включения узла карту ещё не прикладывали
+        welder = Welder.objects.filter(rfid_uid=uid).first()
+        log.info(
+            "узел %s: карта %s (%s) — %s, %s с назад, событие №%s",
+            self.node_id, uid,
+            welder.fio if welder else "не записана ни за одним сварщиком",
+            "ПРИНЯТА" if st.get("tap_ok") else "ОТКАЗ",
+            st.get("tap_age"), seq,
+        )
+
+    def sync_cards(self, st: dict):
+        """Сверить версию списка на узле с нашей; разошлись — отправить."""
+        if "cards_ver" not in st:
+            return  # старая прошивка: списка карт у неё нет
+        node_ver = str(st.get("cards_ver") or "").strip()
+        ver, uids = CARDS.get(self.node_id)
+
+        if node_ver != self.cards_node_ver:
+            self.cards_node_ver = node_ver
+            if node_ver == ver:
+                log.info("узел %s: список карт v=%s на узле, карт %s — совпадает с порталом",
+                         self.node_id, ver, st.get("cards_n"))
+                if st.get("cards_n") is not None and st.get("cards_n") != len(uids):
+                    log.warning("узел %s: версия совпала, но на узле карт %s, а в списке %s",
+                                self.node_id, st.get("cards_n"), len(uids))
+
+        if node_ver == ver:
+            return
+
+        # эту же версию недавно отправляли — даём узлу время, не долбим
+        if self.cards_sent_ver == ver and time.monotonic() - self.cards_sent_at < CARDS_RETRY_SECONDS:
+            return
+        self.cards_sent_ver = ver
+        self.cards_sent_at = time.monotonic()
+
+        log.info("узел %s: на узле список %s, у портала v=%s (карт %s) — отправляю",
+                 self.node_id, f"v={node_ver}" if node_ver else "отсутствует", ver, len(uids))
+        try:
+            response = self.http.post(
+                self.cards_url,
+                data=CardList.body(ver, uids).encode(),
+                headers={"Content-Type": "text/plain; charset=utf-8"},
+                timeout=CARDS_TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            log.warning("узел %s: список карт не отправлен: %s", self.node_id, exc)
+            return
+        text = response.text.strip()[:200]
+        if response.ok:
+            log.info("узел %s: список карт v=%s отправлен, ответ %s %s",
+                     self.node_id, ver, response.status_code, text)
+        else:
+            log.warning("узел %s: узел не принял список карт v=%s: %s %s",
+                        self.node_id, ver, response.status_code, text)
 
     def idle_too_long(self, at: datetime) -> bool:
         since = self.last_arc_at or self.session.started_at

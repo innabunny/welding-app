@@ -146,3 +146,81 @@ class PollerOfflineTests(TestCase):
         self.p.on_state(state(allowed=False), T0)
         self.p.on_failure(TimeoutError("нет ответа"))
         self.assertTrue(NodeState.objects.get(node_id="node-o").is_online)
+
+
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+class CardListTests(TestCase):
+    """Список разрешённых карт для узла и его отправка."""
+
+    def setUp(self):
+        from datetime import date
+
+        from apps.attestation.models import Attestation
+        from apps.materials.models import MaterialGroup
+
+        method = WeldingMethod.objects.create(id="tig-c", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        other = WeldingMethod.objects.create(id="mig-c", name="МП", process=WeldingMethod.Process.choices[0][0])
+        group = MaterialGroup.objects.create(code="M01")
+        Equipment.objects.create(name="Аппарат", method=method, node_id="node-c", node_ip="127.0.0.1")
+        Equipment.objects.create(name="Полуавтомат", method=other, node_id="node-m", node_ip="127.0.0.2")
+
+        def welder(uid, **kw):
+            return Welder.objects.create(fio=uid, education="—", rfid_uid=uid, **kw)
+
+        def attest(w, until, on=method):
+            Attestation.objects.create(welder=w, method=on, group=group, status="done",
+                                       attested_at=date(2025, 1, 1), valid_until=until)
+
+        attest(welder("00aa0001"), date(2099, 1, 1))                   # действует
+        attest(welder("00aa0002"), date(2000, 1, 1))                   # просрочена
+        welder("00aa0003")                                             # без аттестации
+        welder("007D6A16", is_service=True)                            # сервисная
+        attest(welder("00aa0005", is_active=False), date(2099, 1, 1))  # уволен
+        attest(welder("00aa0006"), date(2099, 1, 1), on=other)         # допуск на другой способ
+        poller.CARDS.cache.clear()  # кэш общий для модуля — сбрасываем между тестами
+
+    def test_list_has_attested_and_service_cards_only(self):
+        ver, uids = poller.CARDS.get("node-c")
+        self.assertEqual(uids, ["007d6a16", "00aa0001"])
+        self.assertEqual(len(ver), 8)
+        self.assertEqual(poller.CardList.body(ver, uids), f"v={ver}\n007d6a16\n00aa0001\n")
+
+    def test_list_follows_method_of_node_equipment(self):
+        # на полуавтомате — только допущенный на него и сервисная карта
+        self.assertEqual(poller.CARDS.get("node-m")[1], ["007d6a16", "00aa0006"])
+        # узел без аппарата — способ неизвестен, только сервисные
+        self.assertEqual(poller.CARDS.get("node-x")[1], ["007d6a16"])
+
+    def test_version_is_fingerprint_of_list(self):
+        ver1, _ = poller.CardList.build("tig-c")
+        self.assertEqual(poller.CardList.build("tig-c")[0], ver1)
+        Welder.objects.filter(rfid_uid="00aa0003").update(is_service=True)
+        self.assertNotEqual(poller.CardList.build("tig-c")[0], ver1)
+
+    def test_sends_only_when_versions_differ_and_not_every_tick(self):
+        from unittest import mock
+
+        p = NodePoller("node-c", "127.0.0.1", FakeSink())
+        ver, _ = poller.CardList.build("tig-c")
+        with mock.patch.object(p.http, "post") as post:
+            post.return_value.ok = True
+            post.return_value.status_code = 200
+            post.return_value.text = "ok"
+            p.sync_cards({"cards_ver": "", "cards_n": 0})
+            p.sync_cards({"cards_ver": "", "cards_n": 0})   # повтор не раньше CARDS_RETRY_SECONDS
+            self.assertEqual(post.call_count, 1)
+            self.assertEqual(post.call_args.kwargs["data"].decode().splitlines()[0], f"v={ver}")
+            p.sync_cards({"cards_ver": ver, "cards_n": 2})
+            p.sync_cards({})                                # старая прошивка — не трогаем
+            self.assertEqual(post.call_count, 1)
+
+    def test_tap_logged_once_per_seq_including_refusals(self):
+        p = NodePoller("node-c", "127.0.0.1", FakeSink())
+        with self.assertLogs("poller", "INFO") as logs:
+            p.log_tap({"tap_seq": 3, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 1})
+            p.log_tap({"tap_seq": 3, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 2})
+            p.log_tap({"tap_seq": 4, "tap_uid": "007D6A16", "tap_ok": True, "tap_age": 0})
+        self.assertEqual(len(logs.output), 2)
+        self.assertIn("00aa0003", logs.output[0])
+        self.assertIn("ОТКАЗ", logs.output[0])
+        self.assertIn("ПРИНЯТА", logs.output[1])
