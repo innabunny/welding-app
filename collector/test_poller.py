@@ -241,3 +241,58 @@ class CardListTests(TestCase):
             restarted.log_tap(tap)
         with self.assertLogs("poller", "INFO"):
             restarted.log_tap({**tap, "tap_seq": 8})
+
+    # ── журнал прикладываний CardTap ──
+
+    def tap(self, uid, ok, seq, node="node-c", cards_ver=None, age=0):
+        p = NodePoller(node, "127.0.0.1", FakeSink())
+        ver = poller.CARDS.get(node)[0]
+        st = {"tap_seq": seq, "tap_uid": uid.upper(), "tap_ok": ok, "tap_age": age,
+              "cards_ver": ver if cards_ver is None else cards_ver}
+        p.log_tap(st, T0)
+        from apps.welding.models import CardTap
+        return CardTap.objects.get(node_id=node, node_seq=seq)
+
+    def test_journal_refusal_reasons_from_database(self):
+        from apps.welding import card_access as ca
+
+        self.assertEqual(self.tap("00ffffff", False, 1).reason, ca.NOT_REGISTERED)
+        self.assertEqual(self.tap("00aa0005", False, 2).reason, ca.INACTIVE)
+        self.assertEqual(self.tap("00aa0002", False, 3).reason, ca.NO_ATTESTATION)   # просрочена
+        self.assertEqual(self.tap("00aa0003", False, 4).reason, ca.NO_ATTESTATION)   # не было
+        self.assertEqual(self.tap("00aa0006", False, 5).reason, ca.NO_METHOD)        # допуск на МП, аппарат РИН
+        self.assertEqual(self.tap("00aa0001", False, 6, node="node-x").reason, ca.UNKNOWN_EQUIPMENT)
+
+    def test_journal_does_not_invent_reason(self):
+        from apps.welding import card_access as ca
+
+        # по базе допущен, а узел отказал — так и пишем
+        same = self.tap("00aa0001", False, 1)
+        self.assertEqual(same.reason, ca.UNDETERMINED)
+        # узел решал по старому списку — это видно в причине
+        stale = self.tap("00aa0001", False, 2, cards_ver="")
+        self.assertTrue(stale.reason.startswith(ca.UNDETERMINED))
+        self.assertIn("на узле был список v=—", stale.reason)
+
+    def test_journal_accepted_rows_and_snapshots(self):
+        service = self.tap("007d6a16", True, 1, age=2.5)
+        self.assertTrue(service.accepted)
+        self.assertEqual(service.reason, "")
+        self.assertEqual(service.welder_name, "007D6A16")
+        self.assertEqual(service.equipment_name, "Аппарат")
+        self.assertEqual(service.card_uid, "007d6a16")
+        self.assertEqual(service.tapped_at, T0 - timedelta(seconds=2.5))
+        # узел пустил того, кого по базе пускать нельзя — видно в причине
+        odd = self.tap("00aa0006", True, 2)
+        self.assertIn("по данным портала", odd.reason)
+
+    def test_journal_one_row_per_event_across_restart(self):
+        from apps.welding.models import CardTap, NodeState
+
+        NodeState.objects.create(node_id="node-c")
+        st = {"tap_seq": 9, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 0, "cards_ver": ""}
+        NodePoller("node-c", "127.0.0.1", FakeSink()).log_tap(st, T0)
+        restarted = NodePoller("node-c", "127.0.0.1", FakeSink())
+        restarted.log_tap(st, T0)
+        restarted.log_tap(st, T0)
+        self.assertEqual(CardTap.objects.count(), 1)

@@ -23,7 +23,8 @@
 #   cards_ver, cards_n — версия списка разрешённых карт на узле и число карт
 #       в нём. cards_ver пустой — списка нет, узел запрещает сварку всем
 #   tap_uid, tap_ok, tap_age, tap_seq — последнее прикладывание карты:
-#       номер, принята ли, сколько секунд назад, порядковый номер события
+#       номер, принята ли, сколько секунд назад, порядковый номер события.
+#       Каждое новое прикладывание — строка в журнале CardTap
 #
 # Список разрешённых карт узел хранит у себя и сам решает, пускать ли
 # сварщика. Приёмник собирает для каждого узла свой список из базы —
@@ -40,7 +41,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import requests
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.db.models import Exists, OuterRef, Q
 
 from apps.attestation.models import Attestation
@@ -48,7 +49,8 @@ from apps.equipment.models import Equipment
 from apps.welders.models import Welder
 from apps.welding.broadcast import send_event, send_live
 from apps.welding.models import ArcRun, WeldingSession
-from apps.welding.models import NodeState
+from apps.welding.card_access import tap_reason
+from apps.welding.models import CardTap, NodeState
 from apps.welding.watchdog import OFFLINE_AFTER_SECONDS, mark_offline, touch
 
 log = logging.getLogger("poller")
@@ -359,7 +361,7 @@ class NodePoller(threading.Thread):
         # Список карт и журнал прикладываний — в конце такта и каждый
         # в своём try: сбой в них не должен ломать сеанс и точки сварки
         try:
-            self.log_tap(st)
+            self.log_tap(st, at)
         except Exception:
             log.exception("узел %s: ошибка записи прикладывания карты", self.node_id)
         try:
@@ -369,15 +371,18 @@ class NodePoller(threading.Thread):
 
     # ─────────────────────── карты ───────────────────────
 
-    def log_tap(self, st: dict):
-        """Прикладывание карты — в журнал приёмника, и принятые, и отказы.
+    def log_tap(self, st: dict, at: datetime | None = None):
+        """Прикладывание карты — в журнал CardTap и в лог, и принятые, и отказы.
 
         Узел отдаёт только последнее прикладывание, и одно и то же
         приходит в ответе на каждом такте. Новое событие — когда сменился
         tap_seq. После перезагрузки узла счёт начинается заново, поэтому
         сравниваем на «не равно», а не на «больше». Последний записанный
         номер хранится в базе, так что перезапуск приёмника дубля не даст.
+
+        at — момент ответа узла; время события = at − tap_age.
         """
+        at = at or now_utc()
         seq = st.get("tap_seq")
         if seq is None:
             return
@@ -391,20 +396,50 @@ class NodePoller(threading.Thread):
             self.tap_seq_loaded = True
         if seq == self.tap_seq:
             return
-        self.tap_seq = seq
-        # в базу — только при смене номера, то есть на новое прикладывание
-        NodeState.objects.filter(node_id=self.node_id).update(last_tap_seq=seq)
+
         uid = (st.get("tap_uid") or "").strip().lower()
-        if not uid:
-            return  # с включения узла карту ещё не прикладывали
-        welder = Welder.objects.filter(rfid_uid=uid).first()
-        log.info(
-            "узел %s: карта %s (%s) — %s, %s с назад, событие №%s",
-            self.node_id, uid,
-            welder.fio if welder else "не записана ни за одним сварщиком",
-            "ПРИНЯТА" if st.get("tap_ok") else "ОТКАЗ",
-            st.get("tap_age"), seq,
-        )
+        accepted = bool(st.get("tap_ok"))
+        welder = Welder.objects.filter(rfid_uid__iexact=uid).first() if uid else None
+        equipment = Equipment.objects.filter(node_id=self.node_id).first()
+        node_ver = str(st.get("cards_ver") or "").strip()
+        portal_ver = CARDS.get(self.node_id)[0]
+        try:
+            age = max(0.0, float(st.get("tap_age") or 0))
+        except (TypeError, ValueError):
+            age = 0.0
+
+        # запись в журнал и номер события — вместе: упадёт одно, не будет
+        # и другого, и на следующем такте событие запишется заново
+        with transaction.atomic():
+            if uid:  # пустой номер — с включения узла карту ещё не прикладывали
+                CardTap.objects.create(
+                    node_id=self.node_id,
+                    equipment=equipment,
+                    equipment_name=equipment.name if equipment else "",
+                    card_uid=uid,
+                    welder=welder,
+                    welder_name=welder.fio if welder else "",
+                    accepted=accepted,
+                    reason=tap_reason(
+                        accepted, welder, equipment.method_id if equipment else None,
+                        node_ver, portal_ver,
+                    ),
+                    tapped_at=at - timedelta(seconds=age),
+                    node_seq=seq,
+                    node_cards_ver=node_ver,
+                    portal_cards_ver=portal_ver,
+                )
+            NodeState.objects.filter(node_id=self.node_id).update(last_tap_seq=seq)
+        self.tap_seq = seq
+
+        if uid:
+            log.info(
+                "узел %s: карта %s (%s) — %s, %s с назад, событие №%s",
+                self.node_id, uid,
+                welder.fio if welder else "не записана ни за одним сварщиком",
+                "ПРИНЯТА" if accepted else "ОТКАЗ",
+                st.get("tap_age"), seq,
+            )
 
     def sync_cards(self, st: dict):
         """Сверить версию списка на узле с нашей; разошлись — отправить."""
@@ -476,7 +511,7 @@ class NodePoller(threading.Thread):
         if equipment is None:
             log.warning("узел %s не привязан к оборудованию", self.node_id)
             return
-        welder = Welder.objects.filter(rfid_uid=uid).first() if uid else None
+        welder = Welder.objects.filter(rfid_uid__iexact=uid).first() if uid else None
         if uid and welder is None:
             log.warning("узел %s: карта %s не записана ни за одним сварщиком", self.node_id, uid)
 
