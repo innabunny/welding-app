@@ -152,9 +152,14 @@ export function TelemetryChart({ rows, domain, arcs, plan, deviations, open }: P
   const uSpan = uTo - uFrom || 1
   const uLo = uFrom - (0.03 / 0.24) * uSpan
   const uHi = uLo + uSpan / 0.24
-  const uStep = uSpan > 4 ? 2 : 1
+  // ровные деления: 10, 12, 14 В — а не 5, 19, 33 при большом разбросе
+  const uStep = [1, 2, 5, 10, 20].find((st) => uSpan / st <= 4) ?? 50
   const uTicks: number[] = []
-  for (let v = uFrom; v <= uTo; v += uStep) uTicks.push(v)
+  for (let v = Math.ceil(uFrom / uStep) * uStep; v <= uTo; v += uStep) uTicks.push(v)
+
+  // шаг меток меньше минуты — нужны секунды, иначе подписи повторяются: 10:47, 10:47
+  const xTicks = timeTicks(domain[0], domain[1], 9)
+  const withSec = xTicks.some((t) => new Date(t).getSeconds() !== 0)
 
   const minDevMs = (domain[1] - domain[0]) * 0.006
   const arcById = new Map(arcs.map((a) => [a.id, a]))
@@ -171,8 +176,8 @@ export function TelemetryChart({ rows, domain, arcs, plan, deviations, open }: P
               dataKey="t"
               type="number"
               domain={domain}
-              ticks={timeTicks(domain[0], domain[1], 9)}
-              tickFormatter={(v: number) => formatTime(v)}
+              ticks={xTicks}
+              tickFormatter={(v: number) => formatTime(v, withSec)}
               stroke={$.axis}
               tick={TICK}
               allowDataOverflow
@@ -193,6 +198,9 @@ export function TelemetryChart({ rows, domain, arcs, plan, deviations, open }: P
               domain={[uLo, uHi]}
               ticks={uTicks}
               stroke={$.axis}
+              // как в референсе: линия правой шкалы — только вдоль полосы
+              // напряжения, пунктиром (ниже ReferenceLine), а не на всю высоту
+              axisLine={false}
               tick={TICK}
               tickFormatter={(v: number) => `${v} В`}
               width={46}
@@ -302,6 +310,16 @@ export function TelemetryChart({ rows, domain, arcs, plan, deviations, open }: P
                 }}
               />
             ))}
+            <ReferenceLine
+              yAxisId="u"
+              segment={[
+                { x: domain[1], y: uFrom },
+                { x: domain[1], y: uTo },
+              ]}
+              stroke={$.axis}
+              strokeDasharray="2 3"
+              ifOverflow="visible"
+            />
             {open && <ReferenceLine yAxisId="i" x={lastT} stroke={$.fg2} strokeDasharray="2 4" />}
 
             <Tooltip
