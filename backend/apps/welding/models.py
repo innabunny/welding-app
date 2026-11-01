@@ -736,6 +736,12 @@ class NodeState(models.Model):
     # от «прошивка повисла и перезапустилась сама»
     reset_reason = models.CharField("причина пуска", max_length=40, blank=True)
 
+    # Номер последнего прикладывания карты (tap_seq), уже записанного
+    # в журнал. Узел отдаёт последнее прикладывание в каждом ответе;
+    # номер в базе, а не в памяти приёмника — чтобы после перезапуска
+    # приёмника то же событие не записалось второй раз
+    last_tap_seq = models.BigIntegerField("последнее прикладывание, №", null=True, blank=True)
+
     class Meta:
         verbose_name = "состояние узла"
         verbose_name_plural = "состояние узлов"

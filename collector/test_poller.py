@@ -224,3 +224,20 @@ class CardListTests(TestCase):
         self.assertIn("00aa0003", logs.output[0])
         self.assertIn("ОТКАЗ", logs.output[0])
         self.assertIn("ПРИНЯТА", logs.output[1])
+
+    def test_tap_not_logged_again_after_collector_restart(self):
+        from apps.welding.models import NodeState
+
+        NodeState.objects.create(node_id="node-c")
+        tap = {"tap_seq": 7, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 1}
+        with self.assertLogs("poller", "INFO") as logs:
+            NodePoller("node-c", "127.0.0.1", FakeSink()).log_tap(tap)
+        self.assertEqual(len(logs.output), 1)
+        self.assertEqual(NodeState.objects.get(node_id="node-c").last_tap_seq, 7)
+
+        # приёмник перезапустили — новый поток, то же событие в ответе узла
+        restarted = NodePoller("node-c", "127.0.0.1", FakeSink())
+        with self.assertNoLogs("poller", "INFO"):
+            restarted.log_tap(tap)
+        with self.assertLogs("poller", "INFO"):
+            restarted.log_tap({**tap, "tap_seq": 8})

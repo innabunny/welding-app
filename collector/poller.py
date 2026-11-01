@@ -221,8 +221,10 @@ class NodePoller(threading.Thread):
         self.cards_sent_at = 0.0
         # версия на узле с прошлого такта — чтобы писать в журнал только смену
         self.cards_node_ver: str | None = None
-        # номер последнего прикладывания карты, уже записанного в журнал
+        # номер последнего прикладывания карты, уже записанного в журнал;
+        # хранится в NodeState.last_tap_seq, при запуске читается оттуда
         self.tap_seq = None
+        self.tap_seq_loaded = False
 
         self.fails = 0
         self.last_ok_at: datetime | None = None
@@ -373,13 +375,26 @@ class NodePoller(threading.Thread):
         Узел отдаёт только последнее прикладывание, и одно и то же
         приходит в ответе на каждом такте. Новое событие — когда сменился
         tap_seq. После перезагрузки узла счёт начинается заново, поэтому
-        сравниваем на «не равно», а не на «больше».
+        сравниваем на «не равно», а не на «больше». Последний записанный
+        номер хранится в базе, так что перезапуск приёмника дубля не даст.
         """
         seq = st.get("tap_seq")
-        uid = (st.get("tap_uid") or "").strip().lower()
-        if seq is None or seq == self.tap_seq:
+        if seq is None:
+            return
+        if not self.tap_seq_loaded:
+            # первый ответ после запуска приёмника: что уже записано
+            # до перезапуска — в базе
+            self.tap_seq = (
+                NodeState.objects.filter(node_id=self.node_id)
+                .values_list("last_tap_seq", flat=True).first()
+            )
+            self.tap_seq_loaded = True
+        if seq == self.tap_seq:
             return
         self.tap_seq = seq
+        # в базу — только при смене номера, то есть на новое прикладывание
+        NodeState.objects.filter(node_id=self.node_id).update(last_tap_seq=seq)
+        uid = (st.get("tap_uid") or "").strip().lower()
         if not uid:
             return  # с включения узла карту ещё не прикладывали
         welder = Welder.objects.filter(rfid_uid=uid).first()
