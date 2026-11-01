@@ -70,14 +70,16 @@ class WelderAdmin(admin.ModelAdmin):
         states = [
             a.expiry_state for a in obj.attestations.all() if a.status == "done"
         ]
+        # format_html в Django 6 требует подставляемых значений: цвет и текст
+        # передаём аргументами, а не вписываем в шаблон
         if not states:
-            return format_html('<span style="color:#888">нет</span>')
+            return format_html('<span style="color:{}">{}</span>', "#888", "нет")
 
         if "expired" in states:
-            return format_html('<span style="color:#b34242">просрочен</span>')
+            return format_html('<span style="color:{}">{}</span>', "#b34242", "просрочен")
         if "soon" in states:
-            return format_html('<span style="color:#a8701c">истекает</span>')
-        return format_html('<span style="color:#24785a">действует</span>')
+            return format_html('<span style="color:{}">{}</span>', "#a8701c", "истекает")
+        return format_html('<span style="color:{}">{}</span>', "#24785a", "действует")
 
     @admin.display(description="Карта", boolean=True)
     def has_card(self, obj):
