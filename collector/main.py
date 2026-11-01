@@ -60,6 +60,10 @@ class Collector:
     def __init__(self):
         # недопустимые имена узлов, о которых уже написали в лог
         self.bad_nodes: set[str] = set()
+        # опрос по HTTP; None — выключен (POLL_NODES не 1)
+        self.poll_manager = None
+        # узлы, о которых уже написали «данные по MQTT пропускаю»
+        self.duplicate_nodes: set[str] = set()
         self.ch = ClickHouseClient(
             host=os.environ.get("CH_HOST", "clickhouse"),
             port=9000,
@@ -106,7 +110,8 @@ class Collector:
         # опрос узлов по HTTP — рядом с MQTT, включается переменной
         if os.environ.get("POLL_NODES") == "1":
             from poller import PollManager
-            PollManager(self).start()
+            self.poll_manager = PollManager(self)
+            self.poll_manager.start()
 
         try:
             while True:
@@ -172,6 +177,23 @@ class Collector:
             return
         if node:
             touch(node)
+
+        # Узел, который опрашивается по HTTP, данные сварки шлёт и по MQTT,
+        # как только достучится до брокера. Опрос уже пишет сеансы, дуги и
+        # замеры — второй источник задвоил бы каждый сеанс. По MQTT от такого
+        # узла берём только запрос допуска по карте и служебный статус
+        if (
+            kind in ("session", "arc", "samples", "live")
+            and self.poll_manager is not None
+            and node in self.poll_manager.pollers
+        ):
+            if node not in self.duplicate_nodes:
+                self.duplicate_nodes.add(node)
+                log.info(
+                    "узел %s опрашивается по HTTP — его данные сварки по MQTT "
+                    "пропускаю, чтобы не задвоить сеансы", node,
+                )
+            return
 
         try:
             if kind == "session":
