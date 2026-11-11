@@ -20,6 +20,11 @@ const light = {
   'warning-soft': '#fbf0dd',
   danger: '#b34242',
   'danger-soft': '#fae9e9',
+  // для экранов телеметрии: второстепенный текст, напряжение на графике,
+  // текст на красной подложке отклонения
+  'text-2': '#3d505b',
+  volt: '#c27a12',
+  'danger-ink': '#8a2b2b',
 } as const
 
 type ColorName = keyof typeof light
@@ -41,6 +46,9 @@ const dark: Record<ColorName, string> = {
   'warning-soft': '#362a16',
   danger: '#e07a7a',
   'danger-soft': '#3a2020',
+  'text-2': '#bccbd3',
+  volt: '#f0b35a',
+  'danger-ink': '#ffdcdc',
 }
 
 const shadow = {
@@ -49,6 +57,31 @@ const shadow = {
 }
 
 const colorNames = Object.keys(light) as ColorName[]
+
+// Имена цветов из референса телеметрии (docs/telemetry-demo.html), но значения —
+// токены портала: экраны телеметрии следуют светлой и тёмной теме как всё остальное
+const v = (name: ColorName) => `rgb(var(--c-${name}) / <alpha-value>)`
+const telemetryColors = {
+  panel: v('surface'),
+  panel2: v('surface-2'),
+  line: v('border'),
+  fg: v('text'),
+  fg2: v('text-2'),
+  arc: v('teal'),
+  cur: v('primary'),
+  volt: v('volt'),
+  ok: v('success'),
+  'ok-bg': v('success-soft'),
+  warn: v('warning'),
+  crit: v('danger'),
+  'crit-bg': v('danger-soft'),
+  'crit-ink': v('danger-ink'),
+  'crit-strong': v('danger'),
+  't-arc': v('primary'),
+  't-contact': '#e6875f',
+  't-diff': v('teal'),
+  't-ebw': '#a77bd6',
+}
 
 // каналы через пробел — чтобы работали модификаторы прозрачности (bg-success/40)
 function channels(hex: string): string {
@@ -81,6 +114,7 @@ export default {
       current: 'currentColor',
       white: '#ffffff',
       ...colors,
+      ...telemetryColors,
     },
     // не меньше 12px: интерфейс смотрят с расстояния
     fontSize: {
@@ -111,6 +145,9 @@ export default {
     fontFamily: {
       sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
       mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      cond: ['"IBM Plex Sans Condensed"', '"Arial Narrow"', 'system-ui', 'sans-serif'],
+      // цифры часов в шапке — как на экранах телеметрии, на всех страницах
+      'plex-mono': ['"IBM Plex Mono"', 'ui-monospace', 'Consolas', 'monospace'],
     },
     extend: {
       fontWeight: { heading: '650' },

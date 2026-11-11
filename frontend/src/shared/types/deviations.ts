@@ -14,7 +14,7 @@ export type DeviationParameter =
 
 export type Severity = 'замечание' | 'предупреждение' | 'нарушение';
 
-export type SessionMode = 'по техпроцессу' | 'отработка' | 'прихватка';
+export type SessionMode = 'по техпроцессу' | 'отработка' | 'прихватка' | 'не указан';
 
 export interface Deviation {
   id: number;
@@ -54,6 +54,10 @@ export interface Deviation {
   /** куда отправлять решение */
   weldId: number | null;
   runId: number | null;
+  /** выше верхней или ниже нижней границы; null — у нарушений порядка */
+  direction: 'above' | 'below' | null;
+  /** на сколько вышли за границу, в единицах параметра */
+  delta: string | null;
 }
 
 export type DecisionResult =

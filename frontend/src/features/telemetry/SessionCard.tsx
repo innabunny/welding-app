@@ -1,75 +1,57 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
 import type { WeldingSession } from '@/shared/types/welding'
-import { Panel } from '@/shared/ui/Card'
-import { ModeBadge } from './Badges'
-import { formatClock, formatDuration, formatStart, secondsSince } from './format'
+import { modeLabel } from './Badges'
+import { fmtSpan, formatDay, formatTime } from './format'
 import { STALE_SESSION_SECONDS } from './posts'
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, mono = false, wide = false }: { label: string; children: ReactNode; mono?: boolean; wide?: boolean }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-0.5 font-semibold">{children}</dd>
+    <div className={cn('flex min-w-0 flex-col', wide && 'col-span-2')}>
+      <dt className="label text-xs text-muted">{label}</dt>
+      <dd className={cn('text-[16px] text-fg', mono && 'tnum font-mono')}>{children}</dd>
     </div>
   )
 }
 
-export function SessionCard({ session, now, large }: { session: WeldingSession; now: number; large: boolean }) {
+/** «Текущий сеанс»: кто варит, в каком режиме и что */
+export function SessionCard({ session, now }: { session: WeldingSession; now: number }) {
   const open = session.finishedAt === null
-  const length = open
-    ? secondsSince(session.startedAt, now)
-    : (Date.parse(session.finishedAt ?? '') - Date.parse(session.startedAt)) / 1000
-  const stale = open && length !== null && length > STALE_SESSION_SECONDS
+  const end = open ? now : Date.parse(session.finishedAt ?? '')
+  const length = (end - Date.parse(session.startedAt)) / 1000
+  const stale = open && length > STALE_SESSION_SECONDS
+  const byCard = session.cardId !== null
 
   return (
-    <Panel
-      title={stale ? 'Сеанс не закрыт' : open ? 'Сеанс идёт' : 'Сеанс закрыт'}
-      subtitle={`с ${formatStart(session.startedAt, now)}${open ? '' : ` по ${formatStart(session.finishedAt, now)}`}`}
-    >
-      <dl className={cn('grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4', large && 'text-lg')}>
-        <Field label="Сварщик">{session.welderName || <span className="text-muted">не опознан</span>}</Field>
-        <Field label="Режим работы">
-          <ModeBadge mode={session.mode} label={session.modeDisplay} />
+    <section aria-label="Сеанс" className="rounded-[8px] bg-panel px-5 py-4 ring-1 ring-line">
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="label text-[16px] text-fg">{stale ? 'Сеанс не закрыт' : open ? 'Текущий сеанс' : 'Сеанс'}</h2>
+        <span className="font-mono text-[14px] text-muted">{String(session.id).padStart(4, '0')}</span>
+        <span className="text-[14px] text-fg2">
+          {formatDay(session.startedAt, false)} · {formatTime(session.startedAt, true)} –{' '}
+          {open ? 'идёт' : formatTime(session.finishedAt, true)} · {fmtSpan(length)}
+        </span>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Field label="Сварщик" wide>
+          {session.welderName || 'не опознан'}
         </Field>
-        {!stale && (
-          <Field label={open ? 'Идёт' : 'Длительность'}>
-            <span className="font-mono">{open ? formatClock(length) : formatDuration(length)}</span>
-          </Field>
-        )}
-        <Field label="Участков дуги">{session.arcsCount}</Field>
-        {session.cardId !== null && (
-          <>
-            <Field label="Деталь, зав. №">
-              {session.partNumber || '—'}
-              {session.serialNo && <span className="ml-1.5 font-mono font-normal">№ {session.serialNo}</span>}
-            </Field>
-            <Field label="Шов · операция">
-              <span className="font-mono">
-                {session.seamNumber || '—'} · {session.operationNumber || '—'}
-              </span>
-            </Field>
-            <Field label="Техкарта">{session.cardNo || '—'}</Field>
-            <Field label="Проходов по карте">{session.passPlan.length}</Field>
-          </>
-        )}
-        {session.routeCodeRaw && <Field label="Код маршрутного листа">{session.routeCodeRaw}</Field>}
+        <Field label="Режим работы">{modeLabel(session.mode)}</Field>
+        <Field label="Деталь" mono={byCard && !!session.partNumber}>
+          {byCard && session.partNumber ? session.partNumber : 'без привязки'}
+        </Field>
+        <Field label="Зав. №" mono>
+          {session.serialNo || '—'}
+        </Field>
+        <Field label="Шов · операция" mono>
+          {session.seamNumber ? `${session.seamNumber} · ${session.operationNumber || '—'}` : '—'}
+        </Field>
       </dl>
-      {session.mode === 'по техпроцессу' && session.passPlan.length === 0 && (
-        <p className="mt-3 text-caption text-warning">
-          Техкарта к сеансу не привязана или в ней нет проходов: режим не контролируется.
-        </p>
-      )}
       {stale && (
-        <p className="mt-3 text-caption text-warning">
+        <p className="mt-3 text-[14px] text-warn">
           Сеанс открыт дольше смены. Скорее всего, узел не прислал его окончание, и сеанс надо закрыть.
         </p>
       )}
-      {session.mode !== 'по техпроцессу' && (
-        <p className="mt-3 text-caption text-muted">
-          Сварка не по техпроцессу: шва по чертежу у этого сеанса нет, сверки с техкартой не будет.
-        </p>
-      )}
-    </Panel>
+    </section>
   )
 }

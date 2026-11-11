@@ -231,3 +231,219 @@ class DecisionRulesTests(TransactionTestCase):
         patch = self.client_as("master").patch(f"/api/weld-decisions/{decision_id}/", {"reason": "x"}, format="json")
         self.assertEqual(patch.status_code, 403)
         self.assertEqual(WeldDecision.objects.get(id=decision_id).reason, "")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+class TelemetrySummaryTests(TransactionTestCase):
+    """Сводка «Сварочное производство»: форма ответа и проверка параметров."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="summary", password="x"))
+
+    def test_needs_period(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-01")
+        self.assertEqual(r.status_code, 400)
+
+    def test_end_before_start(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-10&to=2026-10-01")
+        self.assertEqual(r.status_code, 400)
+
+    def test_empty_fleet_has_all_blocks(self):
+        r = self.client.get("/api/telemetry-summary/?from=2026-10-01&to=2026-10-07")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        for block in ("load", "deviations", "materials", "works", "types"):
+            self.assertIn(block, data)
+        # без оборудования фонда нет — Кз не считается от нуля
+        self.assertEqual(data["load"]["fundSeconds"], 0)
+        self.assertEqual(data["load"]["kz"], 0)
+        self.assertEqual([t["type"] for t in data["types"]], ["arc", "contact", "ebw", "diff"])
+        self.assertEqual(set(data["works"]["arc"]["quality"]), {
+            "без отклонений", "допущено", "на контроль", "не рассмотрено", "на переварку",
+        })
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class BroadcastNodeNameTests(TransactionTestCase):
+    """Плохое имя узла не роняет отправку живых значений и пишется в лог один раз."""
+
+    def test_mac_name_skipped_once(self):
+        from . import broadcast
+
+        broadcast._reported.clear()
+        with self.assertLogs("apps.welding.broadcast", level="ERROR") as logs:
+            for _ in range(5):
+                send_live("A0:B7:65:12:34:56", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(len(logs.output), 1)
+
+    def test_good_name_no_log(self):
+        from . import broadcast
+
+        broadcast._reported.clear()
+        send_live("node-01", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(broadcast._reported, set())
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class GroupMembershipTests(TransactionTestCase):
+    """Канал не остаётся в группе после закрытия — иначе группы копят мёртвые каналы."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="ws-groups", password="x")
+        self.token = Token.objects.create(user=user).key
+
+    async def test_overview_channel_leaves_group(self):
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()
+        ws = WebsocketCommunicator(application, f"/ws/telemetry/?token={self.token}")
+        connected, _ = await ws.connect()
+        self.assertTrue(connected)
+        self.assertEqual(len(layer.groups.get("telemetry.overview", {})), 1)
+        await ws.disconnect()
+        self.assertEqual(len(layer.groups.get("telemetry.overview", {})), 0)
+
+
+class BroadcastFailureTests(TransactionTestCase):
+    """Сбой шины не роняет такт опроса: ошибка в лог один раз, отправка продолжается."""
+
+    def test_failing_layer_logged_once(self):
+        from unittest import mock
+
+        from . import broadcast
+
+        class Broken:
+            async def group_send(self, group, message):
+                raise TimeoutError("Timeout reading from redis")
+
+        broadcast._send_failing = False
+        with mock.patch.object(broadcast, "get_channel_layer", return_value=Broken()):
+            with self.assertLogs("apps.welding.broadcast", level="ERROR") as logs:
+                for _ in range(5):
+                    send_live("node-01", {"i": 1, "u": 1, "arc": True})
+        self.assertEqual(len(logs.output), 1)
+        broadcast._send_failing = False
+
+
+class NodeLinkTests(TransactionTestCase):
+    """touch() сам привязывает узел к оборудованию по node_id."""
+
+    def setUp(self):
+        self.method = WeldingMethod.objects.create(id="tig-l", name="РИН", process="tig")
+
+    def test_links_existing_equipment(self):
+        from .watchdog import touch
+
+        eq = Equipment.objects.create(name="Пост 1", method=self.method, node_id="node-l1")
+        self.assertEqual(touch("node-l1").equipment_id, eq.id)
+
+    def test_unknown_node_stays_unlinked_then_links_later(self):
+        from .watchdog import touch
+
+        self.assertIsNone(touch("node-l2").equipment_id)
+        eq = Equipment.objects.create(name="Пост 2", method=self.method, node_id="node-l2")
+        self.assertEqual(touch("node-l2").equipment_id, eq.id)
+
+    def test_linked_node_does_not_look_up_again(self):
+        from .watchdog import touch
+
+        Equipment.objects.create(name="Пост 3", method=self.method, node_id="node-l3")
+        touch("node-l3")
+        # привязан: только чтение состояния и запись, без поиска оборудования
+        with self.assertNumQueries(2):
+            touch("node-l3")
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY)
+class NodeStatusEventTests(TransactionTestCase):
+    """Пропажа и возврат узла сразу уходят в браузеры событием."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="ws-node", password="x")
+        self.token = Token.objects.create(user=user).key
+
+    async def test_offline_and_online_events(self):
+        from .watchdog import mark_offline, touch
+
+        state = await sync_to_async(touch)("node-ev")
+        ws = WebsocketCommunicator(application, f"/ws/telemetry/?token={self.token}")
+        connected, _ = await ws.connect()
+        self.assertTrue(connected)
+
+        await sync_to_async(mark_offline)(state, state.last_seen_at)
+        self.assertEqual(await ws.receive_json_from(timeout=2), {"event": "node_offline", "node": "node-ev"})
+
+        await sync_to_async(touch)("node-ev")
+        self.assertEqual(await ws.receive_json_from(timeout=2), {"event": "node_online", "node": "node-ev"})
+        await ws.disconnect()
+
+
+# ───────────── журнал прикладываний карт ─────────────
+
+from django.contrib.admin.sites import site as admin_site  # noqa: E402
+from django.test import RequestFactory, TestCase  # noqa: E402
+
+from apps.welders.models import Welder  # noqa: E402
+
+from .models import CardTap  # noqa: E402
+
+
+class CardTapApiTests(TestCase):
+    """Журнал только читается: фильтры, страницы, никаких правок."""
+
+    def setUp(self):
+        method = WeldingMethod.objects.create(id="tig-j", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        self.eq1 = Equipment.objects.create(name="Аппарат 1", method=method, node_id="node-j1")
+        self.eq2 = Equipment.objects.create(name="Аппарат 2", method=method, node_id="node-j2")
+        self.w = Welder.objects.create(fio="Иванов И. И.", education="—", rfid_uid="00aa00aa")
+        t = timezone.make_aware(timezone.datetime(2026, 11, 2, 9, 0))
+
+        def tap(eq, accepted, days, welder=None, seq=1):
+            CardTap.objects.create(
+                node_id=eq.node_id, equipment=eq, equipment_name=eq.name,
+                card_uid="00aa00aa", welder=welder, welder_name=welder.fio if welder else "",
+                accepted=accepted, reason="" if accepted else "нет действующей аттестации",
+                tapped_at=t + timedelta(days=days), node_seq=seq,
+            )
+
+        tap(self.eq1, True, 0, self.w, 1)
+        tap(self.eq1, False, 1, self.w, 2)
+        tap(self.eq2, False, 5, None, 1)
+        self.user = get_user_model().objects.create_user(username="taps", password="x")
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def get(self, **params):
+        r = self.api.get("/api/card-taps/", params)
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json()
+
+    def test_filters(self):
+        self.assertEqual(self.get()["count"], 3)
+        self.assertEqual(self.get(equipment=self.eq1.id)["count"], 2)
+        self.assertEqual(self.get(welder=self.w.id)["count"], 2)
+        self.assertEqual(self.get(result="refused")["count"], 2)
+        self.assertEqual(self.get(result="accepted")["count"], 1)
+        self.assertEqual(self.get(**{"from": "2026-11-03", "to": "2026-11-03"})["count"], 1)
+        # новые сверху, поля в camelCase
+        first = self.get()["results"][0]
+        self.assertEqual(first["equipmentName"], "Аппарат 2")
+        self.assertFalse(first["accepted"])
+
+    def test_bad_date_is_400_not_500(self):
+        self.assertEqual(self.api.get("/api/card-taps/", {"from": "вчера"}).status_code, 400)
+
+    def test_read_only_api_and_admin(self):
+        tap = CardTap.objects.first()
+        self.assertEqual(self.api.post("/api/card-taps/", {}).status_code, 405)
+        self.assertEqual(self.api.delete(f"/api/card-taps/{tap.id}/").status_code, 405)
+        # даже суперпользователь в админке не может добавить, поправить, удалить
+        admin = admin_site._registry[CardTap]
+        request = RequestFactory().get("/")
+        request.user = get_user_model().objects.create_superuser(username="root", password="x")
+        self.assertFalse(admin.has_add_permission(request))
+        self.assertFalse(admin.has_change_permission(request, tap))
+        self.assertFalse(admin.has_delete_permission(request, tap))

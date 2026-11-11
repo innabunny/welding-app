@@ -1,7 +1,8 @@
 import type { CurrentShift } from '@/shared/types/shifts'
 import type { Deviation, WeldDecision, WeldDecisionDraft } from '@/shared/types/deviations'
 import type { NodeState, NodeSummary } from '@/shared/types/nodes'
-import type { ArcRun, ArcSamples, SessionSamples } from '@/shared/types/telemetry'
+import type { SummaryFilters, TelemetrySummary } from '@/shared/types/summary'
+import type { ArcRun, ArcSamples, CardTapFilters, CardTapPage, SessionSamples } from '@/shared/types/telemetry'
 import type { WeldingSession } from '@/shared/types/welding'
 import { api } from './client'
 
@@ -79,5 +80,18 @@ export async function fetchSessionDecisions(sessionId: number): Promise<WeldDeci
   const { data } = await api.get<WeldDecision[]>('/weld-decisions/', {
     params: { session: String(sessionId) },
   })
+  return data
+}
+
+export async function fetchTelemetrySummary(filters: SummaryFilters): Promise<TelemetrySummary> {
+  const { data } = await api.get<TelemetrySummary>('/telemetry-summary/', { params: filters })
+  return data
+}
+
+/** Журнал прикладываний карт, страница по 50, новые первыми */
+export async function fetchCardTaps(filters: CardTapFilters): Promise<CardTapPage> {
+  const params: Record<string, string> = {}
+  for (const [key, value] of Object.entries(filters)) if (value) params[key] = String(value)
+  const { data } = await api.get<CardTapPage>('/card-taps/', { params })
   return data
 }

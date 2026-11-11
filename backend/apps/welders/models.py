@@ -22,6 +22,11 @@ class Welder(models.Model):
                   "тот же UID в десятичном виде с нулями до 10 знаков",
     )
     personnel_no = models.CharField("Табельный номер", max_length=20, blank=True)
+    is_service = models.BooleanField(
+        "Сервисная карта",
+        default=False,
+        help_text="Сервисная карта: допуск без аттестации",
+    )
 
     class Meta:
         verbose_name = 'Сварщик'

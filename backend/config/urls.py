@@ -17,6 +17,7 @@ Including another URLconf
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.http import FileResponse, Http404
 from django.urls import include, path, re_path
 
@@ -36,6 +37,12 @@ urlpatterns = [
     path("api/", include("apps.shifts.urls")),
     
 ]
+
+
+# Daphne, в отличие от runserver, статику не раздаёт — без этого у админки
+# нет стилей. Только в разработке (DEBUG): без DEBUG статику раздаёт WhiteNoise
+if settings.DEBUG:
+    urlpatterns += staticfiles_urlpatterns()
 
 
 def spa_index(request):

@@ -8,6 +8,9 @@ import logging
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.equipment.models import Equipment
+
+from .broadcast import send_event
 from .models import NodeOutage, NodeState
 
 log = logging.getLogger(__name__)
@@ -45,10 +48,24 @@ def touch(node_id: str, **fields) -> NodeState:
     # приходит много раз в секунду, и переписывать всю строку каждый
     # раз — лишняя нагрузка на базу
     changed = ["last_seen_at", "is_online", *fields.keys()]
+
+    # Привязка к оборудованию. Ищем только пока её нет: у привязанного
+    # узла лишнего запроса на каждом такте не будет. Нет аппарата с таким
+    # node_id — оставляем пусто: это «узел в сети, а в справочнике его нет»
+    # (unlinked). Заведут аппарат позже — подхватится на следующем такте
+    if state.equipment_id is None:
+        equipment_id = Equipment.objects.filter(node_id=node_id).values_list("id", flat=True).first()
+        if equipment_id is not None:
+            state.equipment_id = equipment_id
+            changed.append("equipment")
+            log.info("узел %s привязан к оборудованию %s", node_id, equipment_id)
+
     state.save(update_fields=changed)
 
     if was_offline and not created:
         _close_outage(state, now, fields.get("reset_reason", ""))
+        # страница узнаёт о возврате сразу, а не на следующем перезапросе
+        send_event(node_id, {"event": "node_online"})
 
     return state
 
@@ -68,24 +85,35 @@ def check_offline(timeout: int = OFFLINE_AFTER_SECONDS) -> int:
 
     count = 0
     for state in lost:
-        state.is_online = False
-        state.save(update_fields=["is_online"])
-
         # Начало обрыва — последнее сообщение, а не текущий момент:
         # связи не было уже с того времени
-        started = state.last_seen_at or now
-
-        # get_or_create по открытому обрыву: защита от дублей, если
-        # проверка почему-то выполнилась дважды
-        NodeOutage.objects.get_or_create(
-            node=state,
-            finished_at__isnull=True,
-            defaults={"started_at": started, "kind": "нет связи"},
-        )
-        log.warning("узел %s потерян, молчит с %s", state.node_id, started)
+        mark_offline(state, state.last_seen_at or now)
         count += 1
 
     return count
+
+
+def mark_offline(state: NodeState, started) -> None:
+    """Объявить узел потерянным: флаг, запись об обрыве, событие в браузеры.
+
+    Зовёт сторож (молчание по MQTT) и опрос по HTTP — тот видит пропажу
+    узла сразу и не ждёт тридцати секунд.
+    """
+    if not state.is_online:
+        return
+    state.is_online = False
+    state.save(update_fields=["is_online"])
+
+    # get_or_create по открытому обрыву: защита от дублей, если
+    # пропажу заметили дважды
+    NodeOutage.objects.get_or_create(
+        node=state,
+        finished_at__isnull=True,
+        defaults={"started_at": started, "kind": "нет связи"},
+    )
+    log.warning("узел %s потерян, молчит с %s", state.node_id, started)
+    # без этого страница узнала бы о пропаже только при следующем перезапросе
+    send_event(state.node_id, {"event": "node_offline"})
 
 
 def _close_outage(state: NodeState, now, reset_reason: str = "") -> None:

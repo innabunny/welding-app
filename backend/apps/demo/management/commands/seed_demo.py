@@ -253,7 +253,9 @@ class Command(BaseCommand):
                 workshop_id=workshop,
                 welding_since=date(since, self.rng.randint(1, 12), 1),
                 rank=rank,
-                rfid_uid=f"{self.rng.getrandbits(32):08x}",
+                # номера карт не выдумываем: карта попадает в список допуска
+                # на узле, и по выдуманному номеру можно было бы варить.
+                # Настоящие номера вносят в админке.
                 is_active=True,
             ))
         # один уволился — для фильтра «только работающие»

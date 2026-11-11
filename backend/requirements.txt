@@ -3,8 +3,13 @@ Django==6.1.1
 djangorestframework==3.18.1
 djangorestframework-camel-case==1.4.2
 sqlparse==0.6.0
-psycopg[binary]
-channels
-channels-redis
-daphne
-clickhouse-driver
+# Версии закреплены: пересборка образа не должна молча подтянуть новую
+# основную версию. Так уже было с redis-py 8 — у него появился таймаут
+# чтения по умолчанию, и вебсокеты падали (см. CHANNEL_LAYERS в settings).
+# Обновлять осознанно, вместе с бэкендом и приёмником, и прогонять тесты.
+psycopg[binary]==3.3.6
+channels==4.3.2
+channels-redis==4.3.0
+redis==8.1.0
+daphne==4.2.3
+clickhouse-driver==0.2.11

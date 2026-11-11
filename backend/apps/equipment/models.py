@@ -1,6 +1,8 @@
 # УСТАНОВКИ, ЕДИНИЦЫ СКОРОСТИ, ПАРАМЕТРЫ
 from django.db import models
 
+from .validators import validate_node_id
+
 
 class SpeedUnit(models.Model):
     """Единица скорости сварки. Новые добавляются через админку."""
@@ -84,12 +86,18 @@ class Equipment(models.Model):
         verbose_name="Рабочее место",
     )
 
-    # идентификатор узла телеметрии: по нему приходящие данные
-    # находят свой аппарат
+    # имя узла телеметрии: по нему приходящие данные находят свой аппарат.
+    # Это имя поста, а не железа: плату можно заменить, имя останется
     node_id = models.CharField(
         "Идентификатор узла телеметрии", max_length=50,
         blank=True, null=True, unique=True,
-        help_text="MAC или серийный номер платы WT32-ETH01",
+        validators=[validate_node_id],
+        help_text=(
+            "Короткое имя поста латиницей: буквы, цифры, дефис и точка, "
+            "например node-01. Идёт в темы MQTT, в имена каналов живых "
+            "значений и в подписи точек в ClickHouse, поэтому двоеточия "
+            "и пробелы недопустимы. Не MAC-адрес платы."
+        ),
     )
     node_ip = models.GenericIPAddressField(
         "IP узла", null=True, blank=True,

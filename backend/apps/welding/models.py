@@ -240,6 +240,8 @@ class WeldingSession(models.Model):
         ROUTINE = "по техпроцессу", "По техпроцессу"
         TRIAL = "отработка", "Отработка режимов"
         TACK = "прихватка", "Прихватка и вспомогательные работы"
+        # узел не сообщил режим, к операции сеанс не привязан
+        UNSPECIFIED = "не указан", "Не указан"
 
     equipment = models.ForeignKey(
         "equipment.Equipment", on_delete=models.PROTECT,
@@ -736,6 +738,12 @@ class NodeState(models.Model):
     # от «прошивка повисла и перезапустилась сама»
     reset_reason = models.CharField("причина пуска", max_length=40, blank=True)
 
+    # Номер последнего прикладывания карты (tap_seq), уже записанного
+    # в журнал. Узел отдаёт последнее прикладывание в каждом ответе;
+    # номер в базе, а не в памяти приёмника — чтобы после перезапуска
+    # приёмника то же событие не записалось второй раз
+    last_tap_seq = models.BigIntegerField("последнее прикладывание, №", null=True, blank=True)
+
     class Meta:
         verbose_name = "состояние узла"
         verbose_name_plural = "состояние узлов"
@@ -889,3 +897,56 @@ class WeldDecision(models.Model):
         where = self.weld or self.session
         return f"{where}: {self.result}"
          
+
+class CardTap(models.Model):
+    """Прикладывание карты к узлу: кого пустили, кого нет и почему.
+
+    Журнал-доказательство: через год по нему должно быть видно, что
+    система не пустила человека без допуска. Поэтому записываются
+    и принятые карты, и отказы, а записи не правятся и не удаляются —
+    в админке они только для чтения.
+
+    Решение принимает узел по своему списку карт. Причину отказа узел
+    не сообщает — её определяет приёмник по базе в момент события
+    (apps/welding/card_access.py). Если по базе выходит, что карта
+    допущена, причина так и пишется: «не удалось определить».
+
+    Название аппарата и ФИО — снимки на момент события: аппарат
+    переименуют, сварщик уволится, а запись должна читаться как было.
+    """
+
+    node_id = models.CharField("узел", max_length=64, db_index=True)
+    equipment = models.ForeignKey(
+        "equipment.Equipment", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="card_taps", verbose_name="оборудование",
+    )
+    equipment_name = models.CharField("оборудование (снимок)", max_length=200, blank=True)
+    card_uid = models.CharField("номер карты (hex)", max_length=16)
+    welder = models.ForeignKey(
+        "welders.Welder", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="card_taps", verbose_name="сварщик",
+    )
+    welder_name = models.CharField("сварщик (снимок)", max_length=200, blank=True)
+    accepted = models.BooleanField("принята")
+    # у отказа — почему; у принятой — пусто, кроме случая, когда
+    # узел пустил, а по базе карта не допущена: это тоже надо видеть
+    reason = models.CharField("причина", max_length=300, blank=True)
+    tapped_at = models.DateTimeField("время", db_index=True)
+    # порядковый номер события от узла; после перезагрузки узла
+    # счёт начинается заново, поэтому не уникальный
+    node_seq = models.BigIntegerField("№ события на узле")
+    # Версии списка карт в момент события: на узле и у портала.
+    # Разошлись — узел решал по старому списку, это объясняет
+    # расхождение решения узла с базой
+    node_cards_ver = models.CharField("версия списка на узле", max_length=16, blank=True)
+    portal_cards_ver = models.CharField("версия списка у портала", max_length=16, blank=True)
+    recorded_at = models.DateTimeField("записано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "прикладывание карты"
+        verbose_name_plural = "журнал прикладываний карт"
+        ordering = ["-tapped_at", "-id"]
+        indexes = [models.Index(fields=["equipment", "tapped_at"])]
+
+    def __str__(self):
+        return f"{self.card_uid} на {self.node_id}: {'принята' if self.accepted else 'отказ'}"

@@ -34,6 +34,7 @@ django.setup()
 
 # импорт моделей ТОЛЬКО после django.setup() — до него они не готовы
 from apps.equipment.models import Equipment  # noqa: E402
+from apps.equipment.validators import is_valid_node_id  # noqa: E402
 from apps.welders.models import Welder  # noqa: E402
 from apps.welding.models import ArcRun, WeldingSession  # noqa: E402
 from apps.welding.broadcast import send_event, send_live  # noqa: E402
@@ -57,6 +58,12 @@ BATCH_SECONDS = 5
 
 class Collector:
     def __init__(self):
+        # недопустимые имена узлов, о которых уже написали в лог
+        self.bad_nodes: set[str] = set()
+        # опрос по HTTP; None — выключен (POLL_NODES не 1)
+        self.poll_manager = None
+        # узлы, о которых уже написали «данные по MQTT пропускаю»
+        self.duplicate_nodes: set[str] = set()
         self.ch = ClickHouseClient(
             host=os.environ.get("CH_HOST", "clickhouse"),
             port=9000,
@@ -103,7 +110,8 @@ class Collector:
         # опрос узлов по HTTP — рядом с MQTT, включается переменной
         if os.environ.get("POLL_NODES") == "1":
             from poller import PollManager
-            PollManager(self).start()
+            self.poll_manager = PollManager(self)
+            self.poll_manager.start()
 
         try:
             while True:
@@ -155,8 +163,37 @@ class Collector:
 
         kind = msg.topic.rsplit("/", 1)[-1]
         node = data.get("node")
+        if node is not None and not (isinstance(node, str) and is_valid_node_id(node)):
+            # имя уходит в тему ответа, в NodeState, в ClickHouse и в каналы
+            # живых значений — с «/», «:» или пробелом где-то дальше сломается.
+            # Пишем в лог один раз на имя, а не на каждое сообщение
+            if repr(node) not in self.bad_nodes:
+                self.bad_nodes.add(repr(node))
+                log.error(
+                    "сообщение в %s с недопустимым именем узла %r пропущено: "
+                    "нужны латиница, цифры, дефис и точка, например node-01",
+                    msg.topic, node,
+                )
+            return
         if node:
             touch(node)
+
+        # Узел, который опрашивается по HTTP, данные сварки шлёт и по MQTT,
+        # как только достучится до брокера. Опрос уже пишет сеансы, дуги и
+        # замеры — второй источник задвоил бы каждый сеанс. По MQTT от такого
+        # узла берём только запрос допуска по карте и служебный статус
+        if (
+            kind in ("session", "arc", "samples", "live")
+            and self.poll_manager is not None
+            and node in self.poll_manager.pollers
+        ):
+            if node not in self.duplicate_nodes:
+                self.duplicate_nodes.add(node)
+                log.info(
+                    "узел %s опрашивается по HTTP — его данные сварки по MQTT "
+                    "пропускаю, чтобы не задвоить сеансы", node,
+                )
+            return
 
         try:
             if kind == "session":
@@ -193,12 +230,15 @@ class Collector:
             if uid:
                 welder = Welder.objects.filter(rfid_uid=uid.lower()).first()
 
+            # режим не прислан — «не указан»: «по техпроцессу» без техкарты
+            # ушло бы в отчёты как факт
+            mode = data.get("mode") or WeldingSession.Mode.UNSPECIFIED
             WeldingSession.objects.update_or_create(
                 external_id=sid,
                 defaults={
                     "equipment": equipment,
                     "welder": welder,
-                    "mode": data.get("mode", "по техпроцессу"),
+                    "mode": mode,
                     "route_code_raw": data.get("route_code", ""),
                     "started_at": ms_to_dt(data["ts"]),
                 },
@@ -208,7 +248,7 @@ class Collector:
                 "event": "session_start",
                 "sid": sid,
                 "welder": welder.fio if welder else "",
-                "mode": data.get("mode", ""),
+                "mode": mode,
             })
  
 

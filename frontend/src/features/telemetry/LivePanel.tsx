@@ -1,143 +1,144 @@
-import { AlertOctagon, Flame, Unplug } from 'lucide-react'
-import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/cn'
-import { formatNumber } from '@/shared/lib/format'
-import type { SocketStatus } from '@/shared/types/telemetry'
-import { Card } from '@/shared/ui/Card'
-import { EmptyState } from '@/shared/ui/States'
-import { formatDuration, formatLive, formatTime } from './format'
-import type { LiveCorridor } from './plan'
+import type { ArcRun, SocketStatus } from '@/shared/types/telemetry'
+import { FitChip, postState } from './Badges'
+import { fmt1, formatClock, formatTime, secondsSince } from './format'
+import type { Fit, Range } from './plan'
 import { isFresh, type Post } from './posts'
 import { SocketStatusLine } from './SocketStatusLine'
 
 interface Props {
   post: Post
+  /** горящий сейчас участок дуги — для «5:04 с 13:26:10» */
+  arc: ArcRun | null
   socketStatus: SocketStatus
   now: number
-  large: boolean
 }
 
-function Tile({
-  label,
-  children,
-  large,
-  note,
-  alarm = false,
-}: {
-  label: string
-  children: ReactNode
-  large: boolean
-  note?: ReactNode
-  alarm?: boolean
-}) {
+/**
+ * Шкала под цифрой: зелёный коридор допуска и метка живого значения.
+ * Коридор в середине, поля по бокам — чтобы выход за него был виден.
+ */
+function ToleranceBar({ value, r, unit, active }: { value: number | null; r: Range; unit: string; active: boolean }) {
+  const [lo, hi] = r
+  const pad = (hi - lo) * 0.6
+  const min = lo - pad
+  const max = hi + pad
+  const pos = (v: number) => ((Math.min(max, Math.max(min, v)) - min) / (max - min || 1)) * 100
+  const out = value !== null && (value < lo || value > hi)
   return (
-    <div
-      className={cn(
-        'min-w-0 px-5 py-4 [&+&]:border-t [&+&]:border-border md:[&+&]:border-l md:[&+&]:border-t-0',
-        alarm && 'bg-danger-soft',
-      )}
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
-      <div
-        className={cn(
-          'mt-1 font-heading tracking-number',
-          large ? 'text-[88px] leading-none' : 'text-[44px] leading-tight',
-          alarm && 'text-danger',
+    <div className="flex flex-col gap-1">
+      <div className="relative h-3 rounded-[4px] bg-panel2 ring-1 ring-line">
+        <div className="absolute inset-y-0 bg-ok/30 ring-1 ring-ok/60" style={{ left: `${pos(lo)}%`, width: `${pos(hi) - pos(lo)}%` }} />
+        {active && value !== null && (
+          <div
+            className={cn('absolute -top-1.5 h-6 w-1.5 -translate-x-1/2 rounded-[4px]', out ? 'bg-crit' : 'bg-fg')}
+            style={{ left: `${pos(value)}%` }}
+            aria-hidden
+          />
         )}
-      >
-        {children}
       </div>
-      {alarm && (
-        <p className={cn('mt-1 flex items-center gap-1.5 font-semibold text-danger', large ? 'text-2xl' : 'text-sm')}>
-          <AlertOctagon className={large ? 'size-6' : 'size-4'} aria-hidden />
-          Вне допуска
-        </p>
-      )}
-      {note && <p className={cn('mt-1 text-muted', large ? 'text-lg' : 'text-caption')}>{note}</p>}
+      <div className="tnum relative h-4 font-mono text-xs text-fg2">
+        <span className="absolute -translate-x-1/2" style={{ left: `${pos(lo)}%` }}>
+          {fmt1(lo)}
+        </span>
+        <span className="absolute -translate-x-1/2" style={{ left: `${pos(hi)}%` }}>
+          {fmt1(hi)}
+        </span>
+        <span className="absolute right-0 text-muted">допуск, {unit}</span>
+      </div>
     </div>
   )
 }
 
-/** Допуск словами под цифрой — нужен и тогда, когда всё в порядке */
-function corridorNote(corridor: LiveCorridor | null, which: 'current' | 'voltage', unit: string): ReactNode {
-  if (corridor === null) return undefined
-  if (corridor.kind === 'uncontrolled') return 'режим не контролируется: техкарты нет'
-  const r = corridor[which]
-  if (!r) return 'допуска по карте нет'
-  const span = `${formatNumber(r[0])}–${formatNumber(r[1])} ${unit}`
-  if (corridor.kind === 'envelope') return `проход не определён · границы всех проходов ${span}`
-  return `допуск ${span} · ${corridor.passNo !== null ? `проход ${corridor.passNo}` : 'для всех проходов'}`
-}
-
-function Value({ text, unit, large }: { text: string | null; unit: string; large: boolean }) {
-  if (text === null) return <span className={cn('text-muted', large ? 'text-5xl' : 'text-2xl')}>нет данных</span>
+function Measure({
+  label,
+  value,
+  unit,
+  fit,
+  r,
+  dim,
+  big = false,
+}: {
+  label: string
+  value: number | null
+  unit: string
+  fit: Fit
+  r: Range | null
+  dim: boolean
+  big?: boolean
+}) {
+  const out = fit === 'out'
   return (
-    <>
-      {text}
-      <span className={cn('text-muted', large ? 'ml-3 text-5xl' : 'ml-1.5 text-xl')}>{unit}</span>
-    </>
+    <div className={cn('flex min-w-0 flex-col gap-3 px-5 py-5', out ? 'bg-crit-bg' : 'bg-panel')}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={cn('label text-[14px]', out ? 'text-crit-ink' : 'text-muted')}>{label}</span>
+        <FitChip fit={fit} />
+      </div>
+      <div className={cn('tnum font-mono font-semibold leading-none', out ? 'text-crit' : dim ? 'text-muted' : 'text-fg')}>
+        <span className={big ? 'text-[72px] sm:text-[96px]' : 'text-[60px] sm:text-[72px]'}>{value === null ? '—' : fmt1(value)}</span>
+        <span className="ml-2 text-[30px] font-medium text-fg2">{unit}</span>
+      </div>
+      {r && <ToleranceBar value={value} r={r} unit={unit} active={!dim} />}
+    </div>
   )
 }
 
-/** Что сказать под цифрами: откуда они и насколько свежие */
-function Note({ post, socketStatus, now }: Omit<Props, 'large'>) {
+/** Строка под плитками — только когда с показаниями что-то не так */
+function Note({ post, socketStatus }: Pick<Props, 'post' | 'socketStatus'>) {
   if (socketStatus !== 'open') return <SocketStatusLine status={socketStatus} />
-  if (isFresh(post.tick, now)) {
-    return <p className="text-caption text-muted">Обновлено в {formatTime(post.tick.receivedAt, true)}</p>
+  if (post.corridor?.kind === 'envelope') {
+    return <p className="text-[14px] text-fg2">Проход не определён — шкала по крайним границам всех проходов техкарты.</p>
   }
-  if (post.status === 'offline') {
-    const silent = post.node?.silentSeconds
-    return (
-      <p className="text-caption text-warning">
-        Нет связи с узлом {post.equipment.nodeId}
-        {silent != null ? `: последнее сообщение ${formatDuration(silent)} назад` : ': сообщений ещё не было'}
-      </p>
-    )
-  }
-  return (
-    <p className="text-caption text-muted">
-      Узел {post.equipment.nodeId} на связи, но живые показания не приходят: аппарат выключен или узел их не шлёт.
-    </p>
-  )
+  return null
 }
 
-export function LivePanel({ post, socketStatus, now, large }: Props) {
-  if (!post.equipment.nodeId) {
-    return (
-      <EmptyState
-        icon={<Unplug />}
-        title="Узел телеметрии не подключён"
-        description="Живых показаний у этого аппарата нет. Номер узла задаётся в разделе «Оборудование»."
-      />
-    )
-  }
-
+export function LivePanel({ post, arc, socketStatus, now }: Props) {
   const tick = isFresh(post.tick, now) ? post.tick : null
+  const state = postState(post.status)
+  const dim = state !== 'welding'
+  const c = post.corridor && post.corridor.kind !== 'uncontrolled' ? post.corridor : null
+  const pass = post.session?.currentPass ?? null
+  const burning = arc !== null && arc.finishedAt === null
   return (
-    <Card>
-      <div className="grid md:grid-cols-3">
-        <Tile label="Ток" large={large} alarm={post.iFit === 'out'} note={corridorNote(post.corridor, 'current', 'А')}>
-          <Value text={formatLive(tick?.i)} unit="А" large={large} />
-        </Tile>
-        <Tile label="Напряжение" large={large} alarm={post.uFit === 'out'} note={corridorNote(post.corridor, 'voltage', 'В')}>
-          <Value text={formatLive(tick?.u)} unit="В" large={large} />
-        </Tile>
-        <Tile label="Дуга" large={large}>
-          {tick === null ? (
-            <Value text={null} unit="" large={large} />
-          ) : tick.arc ? (
-            <span className="inline-flex items-center gap-2 text-success">
-              <Flame className={large ? 'size-16' : 'size-9'} aria-hidden />
-              Горит
-            </span>
+    <div className="flex flex-col gap-2">
+      <section
+        aria-label="Текущие показания"
+        className="grid grid-cols-1 gap-px overflow-hidden rounded-[8px] bg-line ring-1 ring-line lg:grid-cols-[1.25fr_1fr_1fr]"
+      >
+        <Measure label="Ток" value={tick?.i ?? null} unit="А" fit={post.iFit} r={c?.current ?? null} dim={dim} big />
+        <Measure label="Напряжение" value={tick?.u ?? null} unit="В" fit={post.uFit} r={c?.voltage ?? null} dim={dim} />
+        <div className="flex flex-col gap-3 bg-panel px-5 py-5">
+          <span className="label text-[14px] text-muted">Дуга</span>
+          {state === 'welding' ? (
+            <div className="flex items-center gap-3">
+              <span className="arc-dot inline-block size-5 rounded-full bg-arc" aria-hidden />
+              <span className="font-cond text-[36px] font-semibold text-arc">Горит</span>
+            </div>
           ) : (
-            <span className="text-muted">Не горит</span>
+            <div className="flex items-center gap-3">
+              <span className="inline-block size-5 rounded-full border-2 border-muted" aria-hidden />
+              <span className="font-cond text-[36px] font-semibold text-muted">
+                {state === 'offline' || tick === null ? 'Нет данных' : 'Не горит'}
+              </span>
+            </div>
           )}
-        </Tile>
-      </div>
-      <div className="border-t border-border px-5 py-2.5">
-        <Note post={post} socketStatus={socketStatus} now={now} />
-      </div>
-    </Card>
+          {burning && (
+            <div className="tnum font-mono text-[24px] text-fg">
+              {formatClock(secondsSince(arc.startedAt, now))}
+              <span className="ml-2 font-sans text-[16px] text-fg2">с {formatTime(arc.startedAt, true)}</span>
+            </div>
+          )}
+          {pass ? (
+            <div className="text-[18px] text-fg">
+              Проход <b>{pass.no}</b>
+              {pass.total !== null && <span className="text-fg2"> из {pass.total}</span>}
+            </div>
+          ) : burning ? (
+            <div className="text-fg2">Проход не сопоставлен</div>
+          ) : null}
+        </div>
+      </section>
+      <Note post={post} socketStatus={socketStatus} />
+    </div>
   )
 }

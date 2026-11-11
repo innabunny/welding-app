@@ -10,10 +10,16 @@ import { fit, liveCorridor, type Fit, type LiveCorridor } from './plan'
 import type { ReceivedTick } from './useTelemetrySocket'
 
 /**
- * Показания старше этого считаются устаревшими: узел шлёт их раз
- * в секунду, три пропуска подряд — уже не «сейчас».
+ * Показания старше этого считаются устаревшими — «нет данных».
+ *
+ * Не три секунды: узел раз в пять секунд подвисает почти на три
+ * (похоже, блокирующее переподключение к MQTT в прошивке), и показания
+ * приходят с промежутком до 3,4 с — «нет данных» мигало бы каждые пять
+ * секунд. Шесть — с запасом над подвисанием и на секунду больше порога
+ * «нет связи» на сервере (POLL_OFFLINE_SECONDS=5): дольше узел и так
+ * будет показан «нет связи».
  */
-export const LIVE_FRESH_MS = 3_000
+export const LIVE_FRESH_MS = 6_000
 
 /**
  * Дольше смены сеанс идти не может: если он открыт дольше,
@@ -32,8 +38,14 @@ export type PostStatus =
   | 'free'
   /** узел не на связи */
   | 'offline'
-  /** у аппарата нет узла телеметрии */
+  /** у аппарата нет узла или от узла ещё не было ни одного сообщения */
   | 'no-node'
+
+/**
+ * Колонка «Допуск» списка. «Вне допуска» — живое сравнение с коридором,
+ * «было отклонение» — отклонения, которые уже зафиксировал бэкенд
+ */
+export type Tolerance = 'out-now' | 'was' | 'ok' | 'uncontrolled'
 
 export interface Post {
   equipment: Equipment
@@ -55,6 +67,16 @@ export interface Post {
   uFit: Fit
   /** ток или напряжение прямо сейчас вне коридора */
   outNow: boolean
+  /** null — сеанса нет */
+  tolerance: Tolerance | null
+}
+
+function toleranceOf(session: WeldingSession | null, corridor: LiveCorridor | null, outNow: boolean): Tolerance | null {
+  if (!session) return null
+  if (outNow) return 'out-now'
+  if (session.deviationsCount > 0) return 'was'
+  if (corridor === null || corridor.kind === 'uncontrolled') return 'uncontrolled'
+  return 'ok'
 }
 
 /** Порядок в списке: сначала то, что требует внимания или идёт сейчас */
@@ -62,8 +84,8 @@ const ORDER: Record<PostStatus, number> = {
   arc: 0,
   standby: 1,
   session: 2,
-  offline: 3,
-  free: 4,
+  free: 3,
+  offline: 4,
   'no-node': 5,
 }
 
@@ -82,7 +104,11 @@ function statusOf(
   const fresh = isFresh(tick, now)
   if (fresh && tick.arc) return 'arc'
   // свежие показания — узел точно на связи, даже если список узлов ещё не обновился
-  if (!fresh && !node?.isOnline) return 'offline'
+  if (!fresh) {
+    // узел в справочнике есть, но портал от него ещё ничего не получал
+    if (node === null) return 'no-node'
+    if (!node.isOnline) return 'offline'
+  }
   if (session) return fresh ? 'standby' : 'session'
   return 'free'
 }
@@ -130,6 +156,7 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
     const live = isFresh(tick, now) && tick.arc && corridor !== null && corridor.kind !== 'uncontrolled' ? corridor : null
     const iFit = live ? fit(tick?.i, live.current) : 'none'
     const uFit = live ? fit(tick?.u, live.voltage) : 'none'
+    const outNow = iFit === 'out' || uFit === 'out'
     return {
       equipment: e,
       node,
@@ -142,7 +169,8 @@ export function buildPosts({ equipment, nodes, sessions, ticks, pending, now }: 
       corridor,
       iFit,
       uFit,
-      outNow: iFit === 'out' || uFit === 'out',
+      outNow,
+      tolerance: toleranceOf(session, corridor, outNow),
     }
   })
 

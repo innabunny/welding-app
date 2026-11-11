@@ -132,7 +132,13 @@ export interface SessionStopEvent {
   sid: string
 }
 
-export type TelemetryEvent = SessionStartEvent | SessionStopEvent
+/** Узел пропал или вернулся — состояние узлов надо перечитать */
+export interface NodeStatusEvent {
+  event: 'node_offline' | 'node_online'
+  node: string
+}
+
+export type TelemetryEvent = SessionStartEvent | SessionStopEvent | NodeStatusEvent
 
 /** Состояние соединения с WebSocket портала. */
 export type SocketStatus =
@@ -142,3 +148,45 @@ export type SocketStatus =
   | 'reconnecting'
   /** сервер закрыл с кодом 4001: пользователь не вошёл */
   | 'unauthorized'
+
+/** Прикладывание карты к узлу — строка журнала. Пишет приёмник, портал только читает */
+export interface CardTap {
+  id: number
+  nodeId: string
+  equipmentId: number | null
+  /** снимок названия на момент события */
+  equipmentName: string
+  /** номер карты, hex строчными */
+  cardUid: string
+  welderId: number | null
+  /** снимок ФИО; пусто — карта ни за кем не записана */
+  welderName: string
+  accepted: boolean
+  /**
+   * у отказа — причина, определённая порталом по базе;
+   * у принятой — пусто, если по базе всё сходится
+   */
+  reason: string
+  tappedAt: IsoDateTime
+  /** порядковый номер события на узле */
+  nodeSeq: number
+  nodeCardsVer: string
+  portalCardsVer: string
+}
+
+export interface CardTapFilters {
+  equipment?: string
+  welder?: string
+  /** ГГГГ-ММ-ДД, включительно */
+  from?: string
+  to?: string
+  result?: '' | 'accepted' | 'refused'
+  page?: number
+}
+
+export interface CardTapPage {
+  count: number
+  next: string | null
+  previous: string | null
+  results: CardTap[]
+}

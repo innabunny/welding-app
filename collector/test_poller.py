@@ -59,19 +59,43 @@ class PollerLogicTests(TestCase):
         self.assertEqual(s.external_id, f"node-t-{int(T0.timestamp() * 1000)}")
         self.assertIsNone(s.finished_at)
 
-    def test_points_are_instant_values_and_arc_summary_is_from_last_arc_state(self):
+    def test_session_mode_is_unspecified_not_routine(self):
+        # узел режим не сообщает — «по техпроцессу» без техкарты не пишем
         self.p.on_state(state(), self.at(0))
-        self.p.on_state(state(arc=True, a=150.2, v=11.6, aa=149.0, amin=140.0, amax=151.0, va=11.5), self.at(1))
-        self.p.on_state(state(arc=True, a=148.0, v=11.4, aa=149.9, amin=138.1, amax=153.3, va=11.4), self.at(2))
+        self.assertEqual(WeldingSession.objects.get().mode, WeldingSession.Mode.UNSPECIFIED)
+
+    def test_point_per_second_with_spread_and_arc_summary_from_last_arc_state(self):
+        self.p.on_state(state(), self.at(0))
+        # секунда 1: три замера; секунда 2: два — в базе две точки
+        self.p.on_state(state(arc=True, a=150.0, v=11.6), self.at(1))
+        self.p.on_state(state(arc=True, a=146.0, v=11.4), self.at(1.3))
+        self.p.on_state(state(arc=True, a=152.0, v=11.5), self.at(1.6))
+        self.assertEqual(self.sink.rows, [])  # секунда ещё не закончилась
+        self.p.on_state(state(arc=True, a=148.0, v=11.4), self.at(2.1))
+        self.p.on_state(state(arc=True, a=149.0, v=11.6, aa=149.9, amin=138.1, amax=153.3, va=11.4), self.at(2.5))
         self.p.on_state(state(arc=False), self.at(3))
 
-        # в точке — мгновенные a и v, а не накопительные aa/amin/amax
-        self.assertEqual([r[4:] for r in self.sink.rows], [(150.2, 150.2, 150.2, 11.6), (148.0, 148.0, 148.0, 11.4)])
+        # в точке — среднее, минимум и максимум мгновенных a за секунду и
+        # среднее v; время — начало секунды. Накопительные aa/amin/amax — нет
+        rows = [(r[3], *(round(x, 2) for x in r[4:])) for r in self.sink.rows]
+        self.assertEqual(rows, [
+            (self.at(1), 149.33, 146.0, 152.0, 11.5),
+            (self.at(2), 148.5, 148.0, 149.0, 11.5),
+        ])
         arc = ArcRun.objects.get()
         self.assertEqual(arc.finished_at, self.at(3))
         self.assertEqual((float(arc.current_avg), float(arc.current_min), float(arc.current_max)), (149.9, 138.1, 153.3))
         self.assertEqual(float(arc.voltage_avg), 11.4)
         self.assertTrue(arc.telemetry_complete)
+
+    def test_new_arc_in_same_second_starts_new_point(self):
+        self.p.on_state(state(), self.at(0))
+        self.p.on_state(state(arc=True, a=150.0, v=12), self.at(1.1))
+        self.p.on_state(state(arc=False), self.at(1.4))
+        self.p.on_state(state(arc=True, a=90.0, v=10), self.at(1.7))
+        self.p.on_state(state(arc=False), self.at(2.2))
+        first, second = ArcRun.objects.order_by("started_at")
+        self.assertEqual([(r[0], r[4]) for r in self.sink.rows], [(first.id, 150.0), (second.id, 90.0)])
 
     def test_idle_closes_session_and_lying_card_does_not_reopen_it(self):
         idle = poller.SESSION_IDLE_SECONDS
@@ -109,3 +133,190 @@ class PollerLogicTests(TestCase):
         self.p.on_failure(OSError("нет ответа"))
         self.p.on_state(state(arc=False), self.at(2))
         self.assertFalse(ArcRun.objects.get().telemetry_complete)
+
+
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+class PollerOfflineTests(TestCase):
+    """Опрос сам объявляет «нет связи» через POLL_OFFLINE_SECONDS и снимает его при ответе."""
+
+    def setUp(self):
+        method = WeldingMethod.objects.create(id="tig-o", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        Equipment.objects.create(name="Аппарат", method=method, node_id="node-o", node_ip="127.0.0.1")
+        self.p = NodePoller("node-o", "127.0.0.1", FakeSink())
+
+    def test_offline_after_threshold_then_back(self):
+        from unittest import mock
+
+        from apps.welding.models import NodeOutage, NodeState
+
+        self.p.on_state(state(allowed=False), T0)
+        self.assertTrue(NodeState.objects.get(node_id="node-o").is_online)
+
+        with mock.patch.object(poller, "POLL_OFFLINE_SECONDS", 0):
+            self.p.on_failure(TimeoutError("нет ответа"))
+            self.p.on_failure(TimeoutError("нет ответа"))
+        node = NodeState.objects.get(node_id="node-o")
+        self.assertFalse(node.is_online)
+        self.assertEqual(NodeOutage.objects.filter(node=node, finished_at__isnull=True).count(), 1)
+
+        self.p.on_state(state(allowed=False), T0 + timedelta(seconds=10))
+        node.refresh_from_db()
+        self.assertTrue(node.is_online)
+        self.assertEqual(NodeOutage.objects.filter(node=node, finished_at__isnull=True).count(), 0)
+
+    def test_short_stall_is_not_offline(self):
+        from apps.welding.models import NodeState
+
+        self.p.on_state(state(allowed=False), T0)
+        self.p.on_failure(TimeoutError("нет ответа"))
+        self.assertTrue(NodeState.objects.get(node_id="node-o").is_online)
+
+
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+class CardListTests(TestCase):
+    """Список разрешённых карт для узла и его отправка."""
+
+    def setUp(self):
+        from datetime import date
+
+        from apps.attestation.models import Attestation
+        from apps.materials.models import MaterialGroup
+
+        method = WeldingMethod.objects.create(id="tig-c", name="РИН", process=WeldingMethod.Process.choices[0][0])
+        other = WeldingMethod.objects.create(id="mig-c", name="МП", process=WeldingMethod.Process.choices[0][0])
+        group = MaterialGroup.objects.create(code="M01")
+        Equipment.objects.create(name="Аппарат", method=method, node_id="node-c", node_ip="127.0.0.1")
+        Equipment.objects.create(name="Полуавтомат", method=other, node_id="node-m", node_ip="127.0.0.2")
+
+        def welder(uid, **kw):
+            return Welder.objects.create(fio=uid, education="—", rfid_uid=uid, **kw)
+
+        def attest(w, until, on=method):
+            Attestation.objects.create(welder=w, method=on, group=group, status="done",
+                                       attested_at=date(2025, 1, 1), valid_until=until)
+
+        attest(welder("00aa0001"), date(2099, 1, 1))                   # действует
+        attest(welder("00aa0002"), date(2000, 1, 1))                   # просрочена
+        welder("00aa0003")                                             # без аттестации
+        welder("007D6A16", is_service=True)                            # сервисная
+        attest(welder("00aa0005", is_active=False), date(2099, 1, 1))  # уволен
+        attest(welder("00aa0006"), date(2099, 1, 1), on=other)         # допуск на другой способ
+        poller.CARDS.cache.clear()  # кэш общий для модуля — сбрасываем между тестами
+
+    def test_list_has_attested_and_service_cards_only(self):
+        ver, uids = poller.CARDS.get("node-c")
+        self.assertEqual(uids, ["007d6a16", "00aa0001"])
+        self.assertEqual(len(ver), 8)
+        self.assertEqual(poller.CardList.body(ver, uids), f"v={ver}\n007d6a16\n00aa0001\n")
+
+    def test_list_follows_method_of_node_equipment(self):
+        # на полуавтомате — только допущенный на него и сервисная карта
+        self.assertEqual(poller.CARDS.get("node-m")[1], ["007d6a16", "00aa0006"])
+        # узел без аппарата — способ неизвестен, только сервисные
+        self.assertEqual(poller.CARDS.get("node-x")[1], ["007d6a16"])
+
+    def test_version_is_fingerprint_of_list(self):
+        ver1, _ = poller.CardList.build("tig-c")
+        self.assertEqual(poller.CardList.build("tig-c")[0], ver1)
+        Welder.objects.filter(rfid_uid="00aa0003").update(is_service=True)
+        self.assertNotEqual(poller.CardList.build("tig-c")[0], ver1)
+
+    def test_sends_only_when_versions_differ_and_not_every_tick(self):
+        from unittest import mock
+
+        p = NodePoller("node-c", "127.0.0.1", FakeSink())
+        ver, _ = poller.CardList.build("tig-c")
+        with mock.patch.object(p.http, "post") as post:
+            post.return_value.ok = True
+            post.return_value.status_code = 200
+            post.return_value.text = "ok"
+            p.sync_cards({"cards_ver": "", "cards_n": 0})
+            p.sync_cards({"cards_ver": "", "cards_n": 0})   # повтор не раньше CARDS_RETRY_SECONDS
+            self.assertEqual(post.call_count, 1)
+            self.assertEqual(post.call_args.kwargs["data"].decode().splitlines()[0], f"v={ver}")
+            p.sync_cards({"cards_ver": ver, "cards_n": 2})
+            p.sync_cards({})                                # старая прошивка — не трогаем
+            self.assertEqual(post.call_count, 1)
+
+    def test_tap_logged_once_per_seq_including_refusals(self):
+        p = NodePoller("node-c", "127.0.0.1", FakeSink())
+        with self.assertLogs("poller", "INFO") as logs:
+            p.log_tap({"tap_seq": 3, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 1})
+            p.log_tap({"tap_seq": 3, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 2})
+            p.log_tap({"tap_seq": 4, "tap_uid": "007D6A16", "tap_ok": True, "tap_age": 0})
+        self.assertEqual(len(logs.output), 2)
+        self.assertIn("00aa0003", logs.output[0])
+        self.assertIn("ОТКАЗ", logs.output[0])
+        self.assertIn("ПРИНЯТА", logs.output[1])
+
+    def test_tap_not_logged_again_after_collector_restart(self):
+        from apps.welding.models import NodeState
+
+        NodeState.objects.create(node_id="node-c")
+        tap = {"tap_seq": 7, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 1}
+        with self.assertLogs("poller", "INFO") as logs:
+            NodePoller("node-c", "127.0.0.1", FakeSink()).log_tap(tap)
+        self.assertEqual(len(logs.output), 1)
+        self.assertEqual(NodeState.objects.get(node_id="node-c").last_tap_seq, 7)
+
+        # приёмник перезапустили — новый поток, то же событие в ответе узла
+        restarted = NodePoller("node-c", "127.0.0.1", FakeSink())
+        with self.assertNoLogs("poller", "INFO"):
+            restarted.log_tap(tap)
+        with self.assertLogs("poller", "INFO"):
+            restarted.log_tap({**tap, "tap_seq": 8})
+
+    # ── журнал прикладываний CardTap ──
+
+    def tap(self, uid, ok, seq, node="node-c", cards_ver=None, age=0):
+        p = NodePoller(node, "127.0.0.1", FakeSink())
+        ver = poller.CARDS.get(node)[0]
+        st = {"tap_seq": seq, "tap_uid": uid.upper(), "tap_ok": ok, "tap_age": age,
+              "cards_ver": ver if cards_ver is None else cards_ver}
+        p.log_tap(st, T0)
+        from apps.welding.models import CardTap
+        return CardTap.objects.get(node_id=node, node_seq=seq)
+
+    def test_journal_refusal_reasons_from_database(self):
+        from apps.welding import card_access as ca
+
+        self.assertEqual(self.tap("00ffffff", False, 1).reason, ca.NOT_REGISTERED)
+        self.assertEqual(self.tap("00aa0005", False, 2).reason, ca.INACTIVE)
+        self.assertEqual(self.tap("00aa0002", False, 3).reason, ca.NO_ATTESTATION)   # просрочена
+        self.assertEqual(self.tap("00aa0003", False, 4).reason, ca.NO_ATTESTATION)   # не было
+        self.assertEqual(self.tap("00aa0006", False, 5).reason, ca.NO_METHOD)        # допуск на МП, аппарат РИН
+        self.assertEqual(self.tap("00aa0001", False, 6, node="node-x").reason, ca.UNKNOWN_EQUIPMENT)
+
+    def test_journal_does_not_invent_reason(self):
+        from apps.welding import card_access as ca
+
+        # по базе допущен, а узел отказал — так и пишем
+        same = self.tap("00aa0001", False, 1)
+        self.assertEqual(same.reason, ca.UNDETERMINED)
+        # узел решал по старому списку — это видно в причине
+        stale = self.tap("00aa0001", False, 2, cards_ver="")
+        self.assertTrue(stale.reason.startswith(ca.UNDETERMINED))
+        self.assertIn("на узле был список v=—", stale.reason)
+
+    def test_journal_accepted_rows_and_snapshots(self):
+        service = self.tap("007d6a16", True, 1, age=2.5)
+        self.assertTrue(service.accepted)
+        self.assertEqual(service.reason, "")
+        self.assertEqual(service.welder_name, "007D6A16")
+        self.assertEqual(service.equipment_name, "Аппарат")
+        self.assertEqual(service.card_uid, "007d6a16")
+        self.assertEqual(service.tapped_at, T0 - timedelta(seconds=2.5))
+        # узел пустил того, кого по базе пускать нельзя — видно в причине
+        odd = self.tap("00aa0006", True, 2)
+        self.assertIn("по данным портала", odd.reason)
+
+    def test_journal_one_row_per_event_across_restart(self):
+        from apps.welding.models import CardTap, NodeState
+
+        NodeState.objects.create(node_id="node-c")
+        st = {"tap_seq": 9, "tap_uid": "00AA0003", "tap_ok": False, "tap_age": 0, "cards_ver": ""}
+        NodePoller("node-c", "127.0.0.1", FakeSink()).log_tap(st, T0)
+        restarted = NodePoller("node-c", "127.0.0.1", FakeSink())
+        restarted.log_tap(st, T0)
+        restarted.log_tap(st, T0)
+        self.assertEqual(CardTap.objects.count(), 1)

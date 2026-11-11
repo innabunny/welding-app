@@ -29,17 +29,29 @@ export interface ChartRow {
   iTol: Range | null
   /** допуск по напряжению из карты */
   uTol: Range | null
+  /** номер прохода по карте — для подписи «Проход N» над графиком */
+  passNo: number | null
   arcId: number | null
 }
 
-const GAP: Omit<ChartRow, 't'> = { i: null, band: null, u: null, uBand: null, iTol: null, uTol: null, arcId: null }
+const GAP: Omit<ChartRow, 't'> = { i: null, band: null, u: null, uBand: null, iTol: null, uTol: null, passNo: null, arcId: null }
+
+/**
+ * Внутри одного участка дуги провал в данных дольше этого — тоже
+ * разрыв линии: дуга горела, но что было, неизвестно. Короче — линия
+ * идёт через провал. Узел подвисает на ~3,4 с каждые несколько секунд;
+ * рвать линию на каждом подвисании — получается пунктир вместо графика.
+ */
+const ARC_HOLE_MS = 10_000
 
 /**
  * Пустые корзины сервер не присылает: между проходами просто нет точек.
- * Без вставки recharts соединил бы проходы прямой. Если между соседними
- * точками больше двух ширин корзины — вставляем пустую точку, и линия
- * обрывается. Пустые корзины с сервера не запрашиваем: между проходами
- * деталь крутят минутами, это тысячи бесполезных точек.
+ * Без вставки recharts соединил бы проходы прямой. Разрыв ставим там,
+ * где сменился участок дуги — это и есть пауза: дуга погасла. Внутри
+ * участка — только на провале дольше ARC_HOLE_MS. Если участок у точки
+ * неизвестен — по-старому: промежуток больше двух ширин корзины.
+ * Пустые корзины с сервера не запрашиваем: между проходами деталь
+ * крутят минутами, это тысячи бесполезных точек.
  *
  * passFor — проход по карте для точки (по её участку дуги). Коридор
  * допуска рисуется по проходу, а не один на весь сеанс.
@@ -52,7 +64,7 @@ export function toChartRows(
   const rows: ChartRow[] = []
   let prev: SamplePointLike | undefined
   for (const p of points) {
-    if (prev && stepMs > 0 && p.t - prev.t > 2 * stepMs) rows.push({ t: prev.t + stepMs, ...GAP })
+    if (prev && isBreak(prev, p, stepMs)) rows.push({ t: prev.t + Math.max(stepMs, 1), ...GAP })
     const pass = passFor(p)
     rows.push({
       t: p.t,
@@ -62,11 +74,18 @@ export function toChartRows(
       uBand: p.uMin !== undefined && p.uMax !== undefined ? [p.uMin, p.uMax] : null,
       iTol: pass ? range(pass.currentMin, pass.currentMax) : null,
       uTol: pass ? range(pass.voltageMin, pass.voltageMax) : null,
+      passNo: pass?.no ?? null,
       arcId: p.arcId ?? null,
     })
     prev = p
   }
   return rows
+}
+
+function isBreak(prev: SamplePointLike, p: SamplePointLike, stepMs: number): boolean {
+  const gap = p.t - prev.t
+  if (prev.arcId != null && p.arcId != null) return prev.arcId !== p.arcId || gap > ARC_HOLE_MS
+  return stepMs > 0 && gap > 2 * stepMs
 }
 
 export function isChartRow(v: unknown): v is ChartRow {
@@ -88,4 +107,16 @@ export function timeTicks(from: number, to: number, target = 8): number[] {
   const ticks: number[] = []
   for (let t = Math.ceil((from - offset) / step) * step + offset; t <= to; t += step) ticks.push(t)
   return ticks
+}
+
+/** Отрезки времени, отнесённые к проходам: подписи «Проход N» над графиком */
+export function passSpans(rows: ChartRow[]): { no: number; from: number; to: number }[] {
+  const spans = new Map<number, { no: number; from: number; to: number }>()
+  for (const r of rows) {
+    if (r.passNo === null) continue
+    const s = spans.get(r.passNo)
+    if (s) s.to = r.t
+    else spans.set(r.passNo, { no: r.passNo, from: r.t, to: r.t })
+  }
+  return [...spans.values()]
 }
