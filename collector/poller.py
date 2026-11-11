@@ -69,8 +69,9 @@ SESSION_IDLE_SECONDS = int(os.environ.get("POLL_SESSION_IDLE_SECONDS", "600"))
 # нескольких тактов: узел иногда подвисает на пару-тройку секунд.
 # Задаётся в .env: POLL_OFFLINE_SECONDS=5
 POLL_OFFLINE_SECONDS = float(os.environ.get("POLL_OFFLINE_SECONDS", "5"))
-# узел не может сообщить режим и код маршрутного листа — режим по умолчанию
-SESSION_MODE = os.environ.get("POLL_SESSION_MODE", WeldingSession.Mode.ROUTINE)
+# Узел не сообщает режим. «По техпроцессу» без техкарты не пишем: это
+# ушло бы в отчёты как факт. Режим уточняется при привязке к операции.
+SESSION_MODE = os.environ.get("POLL_SESSION_MODE", WeldingSession.Mode.UNSPECIFIED)
 
 # диагностика узла не меняется пять раз в секунду, а touch пишет в базу
 TOUCH_EVERY_SECONDS = 1.0
@@ -211,6 +212,8 @@ class NodePoller(threading.Thread):
         self.arc: ArcRun | None = None
         self.arc_last_state: dict | None = None
         self.arc_had_gap = False
+        # замеры текущей секунды: в базу — одной точкой (см. add_point)
+        self.bucket: dict | None = None
         self.last_arc_at: datetime | None = None
         # после закрытия по простою карта может так и лежать. Сеанс по ней
         # не открываем, пока не загорится дуга, карту не уберут или не
@@ -342,11 +345,7 @@ class NodePoller(threading.Thread):
                 self.open_arc(at)
             self.arc_last_state = st
             self.last_arc_at = at
-            # в точку — мгновенные значения: накопительные aa/amin/amax
-            # дали бы полосу разброса, растущую к концу прохода
-            self.sink.add_rows([(
-                self.arc.id, self.session.external_id, self.node_id, at, a, a, a, v,
-            )])
+            self.add_point(at, a, v)
         elif not arc and self.arc is not None:
             self.close_arc(at)
 
@@ -578,9 +577,39 @@ class NodePoller(threading.Thread):
         self.arc_had_gap = False
         self.arc_last_state = None
 
+    def add_point(self, at: datetime, a: float, v: float):
+        """Замер — в копилку текущей секунды; секунда сменилась — точка в базу.
+
+        В точку идут среднее, минимум и максимум мгновенных a и v за
+        секунду: так получается полоса разброса тока. Накопительные
+        aa/amin/amax узла не годятся — они за весь участок, и полоса
+        росла бы к концу прохода.
+        """
+        second = at.replace(microsecond=0)
+        b = self.bucket
+        if b is not None and (b["arc_id"] != self.arc.id or b["at"] != second):
+            self.flush_point()
+        if self.bucket is None:
+            self.bucket = {"arc_id": self.arc.id, "sid": self.session.external_id,
+                           "at": second, "a": [], "v": []}
+        self.bucket["a"].append(a)
+        self.bucket["v"].append(v)
+
+    def flush_point(self):
+        """Записать накопленную секунду одной точкой."""
+        b, self.bucket = self.bucket, None
+        if not b:
+            return
+        aa, vv = b["a"], b["v"]
+        self.sink.add_rows([(
+            b["arc_id"], b["sid"], self.node_id, b["at"],
+            sum(aa) / len(aa), min(aa), max(aa), sum(vv) / len(vv),
+        )])
+
     def close_arc(self, at: datetime, complete: bool = True):
         """Сводка участка — из накопительной статистики узла на последнем
         ответе с горящей дугой: это и есть итог по всему участку."""
+        self.flush_point()
         st = self.arc_last_state or {}
         ArcRun.objects.filter(id=self.arc.id).update(
             finished_at=at,

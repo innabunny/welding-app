@@ -59,19 +59,43 @@ class PollerLogicTests(TestCase):
         self.assertEqual(s.external_id, f"node-t-{int(T0.timestamp() * 1000)}")
         self.assertIsNone(s.finished_at)
 
-    def test_points_are_instant_values_and_arc_summary_is_from_last_arc_state(self):
+    def test_session_mode_is_unspecified_not_routine(self):
+        # узел режим не сообщает — «по техпроцессу» без техкарты не пишем
         self.p.on_state(state(), self.at(0))
-        self.p.on_state(state(arc=True, a=150.2, v=11.6, aa=149.0, amin=140.0, amax=151.0, va=11.5), self.at(1))
-        self.p.on_state(state(arc=True, a=148.0, v=11.4, aa=149.9, amin=138.1, amax=153.3, va=11.4), self.at(2))
+        self.assertEqual(WeldingSession.objects.get().mode, WeldingSession.Mode.UNSPECIFIED)
+
+    def test_point_per_second_with_spread_and_arc_summary_from_last_arc_state(self):
+        self.p.on_state(state(), self.at(0))
+        # секунда 1: три замера; секунда 2: два — в базе две точки
+        self.p.on_state(state(arc=True, a=150.0, v=11.6), self.at(1))
+        self.p.on_state(state(arc=True, a=146.0, v=11.4), self.at(1.3))
+        self.p.on_state(state(arc=True, a=152.0, v=11.5), self.at(1.6))
+        self.assertEqual(self.sink.rows, [])  # секунда ещё не закончилась
+        self.p.on_state(state(arc=True, a=148.0, v=11.4), self.at(2.1))
+        self.p.on_state(state(arc=True, a=149.0, v=11.6, aa=149.9, amin=138.1, amax=153.3, va=11.4), self.at(2.5))
         self.p.on_state(state(arc=False), self.at(3))
 
-        # в точке — мгновенные a и v, а не накопительные aa/amin/amax
-        self.assertEqual([r[4:] for r in self.sink.rows], [(150.2, 150.2, 150.2, 11.6), (148.0, 148.0, 148.0, 11.4)])
+        # в точке — среднее, минимум и максимум мгновенных a за секунду и
+        # среднее v; время — начало секунды. Накопительные aa/amin/amax — нет
+        rows = [(r[3], *(round(x, 2) for x in r[4:])) for r in self.sink.rows]
+        self.assertEqual(rows, [
+            (self.at(1), 149.33, 146.0, 152.0, 11.5),
+            (self.at(2), 148.5, 148.0, 149.0, 11.5),
+        ])
         arc = ArcRun.objects.get()
         self.assertEqual(arc.finished_at, self.at(3))
         self.assertEqual((float(arc.current_avg), float(arc.current_min), float(arc.current_max)), (149.9, 138.1, 153.3))
         self.assertEqual(float(arc.voltage_avg), 11.4)
         self.assertTrue(arc.telemetry_complete)
+
+    def test_new_arc_in_same_second_starts_new_point(self):
+        self.p.on_state(state(), self.at(0))
+        self.p.on_state(state(arc=True, a=150.0, v=12), self.at(1.1))
+        self.p.on_state(state(arc=False), self.at(1.4))
+        self.p.on_state(state(arc=True, a=90.0, v=10), self.at(1.7))
+        self.p.on_state(state(arc=False), self.at(2.2))
+        first, second = ArcRun.objects.order_by("started_at")
+        self.assertEqual([(r[0], r[4]) for r in self.sink.rows], [(first.id, 150.0), (second.id, 90.0)])
 
     def test_idle_closes_session_and_lying_card_does_not_reopen_it(self):
         idle = poller.SESSION_IDLE_SECONDS

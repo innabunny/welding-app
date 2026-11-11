@@ -14,7 +14,7 @@ export type DeviationParameter =
 
 export type Severity = 'замечание' | 'предупреждение' | 'нарушение';
 
-export type SessionMode = 'по техпроцессу' | 'отработка' | 'прихватка';
+export type SessionMode = 'по техпроцессу' | 'отработка' | 'прихватка' | 'не указан';
 
 export interface Deviation {
   id: number;

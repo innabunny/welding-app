@@ -240,6 +240,8 @@ class WeldingSession(models.Model):
         ROUTINE = "по техпроцессу", "По техпроцессу"
         TRIAL = "отработка", "Отработка режимов"
         TACK = "прихватка", "Прихватка и вспомогательные работы"
+        # узел не сообщил режим, к операции сеанс не привязан
+        UNSPECIFIED = "не указан", "Не указан"
 
     equipment = models.ForeignKey(
         "equipment.Equipment", on_delete=models.PROTECT,

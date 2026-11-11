@@ -230,12 +230,15 @@ class Collector:
             if uid:
                 welder = Welder.objects.filter(rfid_uid=uid.lower()).first()
 
+            # режим не прислан — «не указан»: «по техпроцессу» без техкарты
+            # ушло бы в отчёты как факт
+            mode = data.get("mode") or WeldingSession.Mode.UNSPECIFIED
             WeldingSession.objects.update_or_create(
                 external_id=sid,
                 defaults={
                     "equipment": equipment,
                     "welder": welder,
-                    "mode": data.get("mode", "по техпроцессу"),
+                    "mode": mode,
                     "route_code_raw": data.get("route_code", ""),
                     "started_at": ms_to_dt(data["ts"]),
                 },
@@ -245,7 +248,7 @@ class Collector:
                 "event": "session_start",
                 "sid": sid,
                 "welder": welder.fio if welder else "",
-                "mode": data.get("mode", ""),
+                "mode": mode,
             })
  
 

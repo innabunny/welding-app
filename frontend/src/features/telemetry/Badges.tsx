@@ -10,6 +10,8 @@ const MODE: Record<string, { label: string; cls: string; icon: ReactNode }> = {
   'по техпроцессу': { label: 'По техкарте', cls: 'bg-panel2 text-fg ring-fg2/40', icon: <FileText /> },
   'прихватка': { label: 'Прихватка', cls: 'bg-warn/10 text-warn ring-warn/45', icon: <Spline /> },
   'отработка': { label: 'Отработка', cls: 'bg-panel2 text-fg2 ring-line border-dashed', icon: <Wrench /> },
+  // узел не сообщил режим, к операции сеанс не привязан
+  'не указан': { label: 'Режим не указан', cls: 'bg-panel2 text-fg2 ring-line border-dashed', icon: <CircleDashed /> },
 }
 
 export const modeLabel = (mode: string) => MODE[mode]?.label ?? (mode || 'режим не указан')
