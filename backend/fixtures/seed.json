@@ -986,5 +986,297 @@
       "break_start": null,
       "break_end": null
     }
+  },
+  {
+    "model": "accounts.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$600000$dummy$dummy=",
+      "is_superuser": true,
+      "username": "admin",
+      "email": "admin@example.com",
+      "is_staff": true,
+      "is_active": true,
+      "name": "Администратор Системы",
+      "role": "admin",
+      "workshop": 1,
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "materials.material",
+    "pk": 8,
+    "fields": {
+      "marka": "ВТ1-0",
+      "group": 2,
+      "tensile_strength": null,
+      "analogs": []
+    }
+  },
+  {
+    "model": "technology.part",
+    "pk": 10,
+    "fields": {
+      "number": "АБВГ.30.114",
+      "name": "Корпус патрубка",
+      "note": "",
+      "is_active": true
+    }
+  },
+  {
+    "model": "technology.seamspec",
+    "pk": 10,
+    "fields": {
+      "part": 10,
+      "number": "1",
+      "joint_type": "стыковое",
+      "material_1": 5,
+      "material_2": 5,
+      "thickness_1": "8.00",
+      "thickness_2": "8.00",
+      "seam_type": "прямой",
+      "seam_diameter": null,
+      "seam_length": "500.0"
+    }
+  },
+  {
+    "model": "technology.operation",
+    "pk": 10,
+    "fields": {
+      "part": 10,
+      "seam": 10,
+      "number": "010",
+      "name": "Сварка корневого прохода",
+      "order": 10,
+      "required_controls": ["РК"]
+    }
+  },
+  {
+    "model": "weldingcards.weldingcard",
+    "pk": 10,
+    "fields": {
+      "operation": 10,
+      "card_no": "ТК-001",
+      "revision": 1,
+      "method": "tig1",
+      "equipment": 1,
+      "welding_mode": "непрерывный",
+      "tungsten": 1,
+      "tungsten_text": "ЭВЛ",
+      "filler": 6,
+      "filler_text": "Св-04Х19Н11М3",
+      "shield_gas": 1,
+      "shield_gas_text": "Аргон высшего сорта ГОСТ 10157",
+      "is_released": true,
+      "author": 1,
+      "author_name": "Администратор Системы",
+      "created_at": "2026-11-01T10:00:00Z",
+      "updated_at": "2026-11-01T10:00:00Z",
+      "extra": {},
+      "heat_treatment": "",
+      "groove_type": "V",
+      "groove_angle": "60.0",
+      "groove_gap": "2.0",
+      "groove_root": "1.0",
+      "groove_cap": "2.0",
+      "groove_svg": ""
+    }
+  },
+  {
+    "model": "weldingcards.weldpass",
+    "pk": 10,
+    "fields": {
+      "card": 10,
+      "no": 1,
+      "current_min": "100.0",
+      "current_max": "120.0",
+      "voltage_min": "12.0",
+      "voltage_max": "14.0",
+      "speed_unit": 1,
+      "speed_raw_min": "5.0",
+      "speed_raw_max": "8.0",
+      "speed_min": "5.0",
+      "speed_max": "8.0",
+      "speed_required": true,
+      "gas_flow_min": "8.0",
+      "gas_flow_max": "10.0",
+      "extra": {}
+    }
+  },
+  {
+    "model": "technology.part",
+    "pk": 11,
+    "fields": {
+      "number": "ВТ-220-05",
+      "name": "Крышка титановая",
+      "note": "",
+      "is_active": true
+    }
+  },
+  {
+    "model": "technology.seamspec",
+    "pk": 11,
+    "fields": {
+      "part": 11,
+      "number": "1",
+      "joint_type": "стыковое",
+      "material_1": 8,
+      "material_2": 8,
+      "thickness_1": "4.00",
+      "thickness_2": "4.00",
+      "seam_type": "кольцевой",
+      "seam_diameter": "150.0",
+      "seam_length": "471.0"
+    }
+  },
+  {
+    "model": "technology.operation",
+    "pk": 11,
+    "fields": {
+      "part": 11,
+      "seam": 11,
+      "number": "010",
+      "name": "Сварка обечайки",
+      "order": 10,
+      "required_controls": []
+    }
+  },
+  {
+    "model": "weldingcards.weldingcard",
+    "pk": 11,
+    "fields": {
+      "operation": 11,
+      "card_no": "ТК-002",
+      "revision": 1,
+      "method": "tig1",
+      "equipment": 1,
+      "welding_mode": "импульсный",
+      "tungsten": 2,
+      "tungsten_text": "ЭВЛ",
+      "shield_gas": 1,
+      "shield_gas_text": "Аргон высшего сорта ГОСТ 10157",
+      "is_released": false,
+      "author": 1,
+      "author_name": "Администратор Системы",
+      "created_at": "2026-11-05T10:00:00Z",
+      "updated_at": "2026-11-05T10:00:00Z",
+      "extra": {},
+      "heat_treatment": "",
+      "groove_gap": "0.5",
+      "groove_cap": "1.0",
+      "groove_svg": ""
+    }
+  },
+  {
+    "model": "weldingcards.weldpass",
+    "pk": 11,
+    "fields": {
+      "card": 11,
+      "no": 1,
+      "current_min": "60.0",
+      "current_max": "80.0",
+      "voltage_min": "10.0",
+      "voltage_max": "12.0",
+      "speed_unit": 1,
+      "speed_raw_min": "10.0",
+      "speed_raw_max": "15.0",
+      "speed_min": "10.0",
+      "speed_max": "15.0",
+      "speed_required": true,
+      "gas_flow_min": "6.0",
+      "gas_flow_max": "8.0",
+      "pulse_current": "100.0",
+      "pulse_time": "0.050",
+      "pause_current": "20.0",
+      "pause_time": "0.020",
+      "extra": {}
+    }
+  },
+  {
+    "model": "technology.part",
+    "pk": 12,
+    "fields": {
+      "number": "АЛ-55-12",
+      "name": "Бак алюминиевый",
+      "note": "",
+      "is_active": true
+    }
+  },
+  {
+    "model": "technology.seamspec",
+    "pk": 12,
+    "fields": {
+      "part": 12,
+      "number": "1",
+      "joint_type": "нахлесточное",
+      "material_1": 1,
+      "material_2": 1,
+      "thickness_1": "2.00",
+      "thickness_2": "2.00",
+      "seam_type": "прямой",
+      "seam_diameter": null,
+      "seam_length": "1200.0"
+    }
+  },
+  {
+    "model": "technology.operation",
+    "pk": 12,
+    "fields": {
+      "part": 12,
+      "seam": 12,
+      "number": "020",
+      "name": "Сварка шва",
+      "order": 20,
+      "required_controls": ["РК", "ГК"]
+    }
+  },
+  {
+    "model": "weldingcards.weldingcard",
+    "pk": 12,
+    "fields": {
+      "operation": 12,
+      "card_no": "ТК-003",
+      "revision": 2,
+      "method": "mig",
+      "equipment": 7,
+      "welding_mode": "непрерывный",
+      "filler": 9,
+      "filler_text": "Св-08Х20Н9Г7Т",
+      "shield_gas": 1,
+      "shield_gas_text": "Аргон высшего сорта ГОСТ 10157",
+      "is_released": true,
+      "author": 1,
+      "author_name": "Администратор Системы",
+      "created_at": "2026-11-10T10:00:00Z",
+      "updated_at": "2026-11-12T10:00:00Z",
+      "extra": {},
+      "heat_treatment": "",
+      "groove_cap": "1.5",
+      "groove_svg": ""
+    }
+  },
+  {
+    "model": "weldingcards.weldpass",
+    "pk": 12,
+    "fields": {
+      "card": 12,
+      "no": 1,
+      "current_min": "150.0",
+      "current_max": "180.0",
+      "voltage_min": "22.0",
+      "voltage_max": "26.0",
+      "speed_unit": 1,
+      "speed_raw_min": "20.0",
+      "speed_raw_max": "25.0",
+      "speed_min": "20.0",
+      "speed_max": "25.0",
+      "speed_required": true,
+      "wire_speed_min": "8.0",
+      "wire_speed_max": "10.0",
+      "gas_flow_min": "12.0",
+      "gas_flow_max": "15.0",
+      "extra": {}
+    }
   }
 ]

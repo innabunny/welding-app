@@ -1,29 +1,27 @@
-import { AttentionTiles } from '@/features/dashboard/AttentionTiles'
-import { AttestationPanel } from '@/features/dashboard/AttestationPanel'
-import { DeviationPanel } from '@/features/dashboard/DeviationPanel'
-import { EquipmentFleet } from '@/features/dashboard/EquipmentFleet'
-import { QuickAccess } from '@/features/dashboard/QuickAccess'
-import { RecentWelds } from '@/features/dashboard/RecentWelds'
-import { useSession } from '@/shared/api/session'
-import { formatLongDate } from '@/shared/lib/format'
+import { AttentionTiles } from '@/features/dashboard/AttentionTiles';
+import { AttestationPanel } from '@/features/dashboard/AttestationPanel';
+import { DeviationPanel } from '@/features/dashboard/DeviationPanel';
+import { EquipmentFleet } from '@/features/dashboard/EquipmentFleet';
+import { QuickAccess } from '@/features/dashboard/QuickAccess';
+import { RecentWelds } from '@/features/dashboard/RecentWelds';
+import { useSession } from '@/shared/api/session';
 
 function greeting(hour: number): string {
-  if (hour < 5) return 'Доброй ночи'
-  if (hour < 12) return 'Доброе утро'
-  if (hour < 18) return 'Добрый день'
-  return 'Добрый вечер'
+  if (hour < 5) return 'Доброй ночи';
+  if (hour < 12) return 'Доброе утро';
+  if (hour < 18) return 'Добрый день';
+  return 'Добрый вечер';
 }
 
-/** «Гостева Инна Сергеевна» → «Инна»; «Инна Г.» → «Инна» */
 function firstName(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/)
-  return (parts.length === 3 ? parts[1] : parts[0]) ?? ''
+  const parts = fullName.trim().split(/\s+/);
+  return (parts.length === 3 ? parts[1] : parts[0]) ?? '';
 }
 
 export function DashboardPage() {
-  const user = useSession((s) => s.user)
-  const now = new Date()
-  const name = user ? firstName(user.name) || user.login : ''
+  const user = useSession((s) => s.user);
+  const now = new Date();
+  const name = user ? firstName(user.name) || user.login : '';
 
   return (
     <>
@@ -34,9 +32,6 @@ export function DashboardPage() {
             {name && `, ${name}`}
           </h1>
           <p className="text-nav text-muted">Что требует внимания сегодня</p>
-        </div>
-        <div className="rounded-control border border-border bg-surface px-3 py-2 text-caption text-muted">
-          {formatLongDate(now)}
         </div>
       </div>
 
@@ -54,5 +49,5 @@ export function DashboardPage() {
 
       <EquipmentFleet />
     </>
-  )
+  );
 }

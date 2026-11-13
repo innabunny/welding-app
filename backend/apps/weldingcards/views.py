@@ -5,6 +5,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.technology.search import parse_query
 from .models import WeldingCard, WeldPass
 from .serializers import WeldingCardListSerializer, WeldingCardSerializer
 
@@ -45,62 +46,32 @@ class WeldingCardViewSet(viewsets.ModelViewSet):
         return WeldingCardSerializer
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        params = self.request.query_params
-
-        search = params.get("search")
-        if search:
-            qs = qs.filter(
-                Q(card_no__icontains=search)
-                | Q(operation__part__number__icontains=search)
-                | Q(operation__part__name__icontains=search)
-                | Q(operation__seam__material_1__marka__icontains=search)
-                | Q(operation__seam__material_2__marka__icontains=search)
-            )
-
-        part = params.get("part")
-        if part:
-            qs = qs.filter(operation__part_id=part)
-
-        method = params.get("method")
-        if method:
-            qs = qs.filter(method_id=method)
-
-        process = params.get("process")
-        if process:
-            qs = qs.filter(method__process=process)
-
-        equipment = params.get("equipment")
-        if equipment:
-            qs = qs.filter(equipment_id=equipment)
-
-        material = params.get("material")
-        if material:
-            qs = qs.filter(
-                Q(operation__seam__material_1_id=material)
-                | Q(operation__seam__material_2_id=material)
-            )
-
-        # толщина теперь одна — у шва, а не две у карты
-        th_from = _dec(params.get("thickness_from"))
-        th_to = _dec(params.get("thickness_to"))
-        if th_from is not None:
-            qs = qs.filter(
-                Q(operation__seam__thickness_1__gte=th_from)
-                | Q(operation__seam__thickness_2__gte=th_from)
-            )
-        if th_to is not None:
-            qs = qs.filter(
-                Q(operation__seam__thickness_1__lte=th_to)
-                | Q(operation__seam__thickness_2__lte=th_to)
-            )
-        released = params.get("released")
-        if released == "1":
-            qs = qs.filter(is_released=True)
-        elif released == "0":
-            qs = qs.filter(is_released=False)
-
-        return qs.distinct()
+        queryset = super().get_queryset()
+        search_query = self.request.query_params.get('search', '')
+        
+        if search_query:
+            parsed = parse_query(search_query)
+            
+            # Фильтруем по материалу (если распознан)
+            if 'material' in parsed:
+                queryset = queryset.filter(
+                    Q(operation__seam__material_1__marka__icontains=parsed['material']) |
+                    Q(operation__seam__material_2__marka__icontains=parsed['material'])
+                )
+            
+            # Фильтруем по толщине (если распознана)
+            if 'thickness_min' in parsed:
+                queryset = queryset.filter(
+                    Q(operation__seam__thickness_1__gte=parsed['thickness_min']) |
+                    Q(operation__seam__thickness_2__gte=parsed['thickness_min'])
+                )
+            if 'thickness_max' in parsed:
+                queryset = queryset.filter(
+                    Q(operation__seam__thickness_1__lte=parsed['thickness_max']) |
+                    Q(operation__seam__thickness_2__lte=parsed['thickness_max'])
+                )
+        
+        return queryset
 
     @action(detail=False, methods=["get"])
     def similar(self, request):
